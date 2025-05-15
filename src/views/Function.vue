@@ -163,7 +163,7 @@
               message.type === 'system' ? 'system-message' : 'bot-message',
               { 'is-new': message.isNew }
             ]"
-          >
+        >
           <div class="message-content">
             {{ message.content }}
           </div>
@@ -200,6 +200,56 @@
 
       <button class="input-submit" @click="sendMessage">发送</button>
     </div>
+    <!-- 个人信息编辑模态框 -->
+    <div class="modal-overlay" v-if="showProfileModal" @click.self="closeProfileModal">
+      <div class="profile-modal">
+        <div class="modal-header">
+          <h3>个人设置</h3>
+          <button class="modal-close" @click="closeProfileModal">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+
+        <div class="modal-content">
+          <div class="avatar-upload">
+            <div class="avatar-preview" :style="{ backgroundImage: `url(${tempAvatarUrl || userInfo?.avatarUrl || defaultAvatar})` }">
+              <input type="file" ref="avatarInput" accept="image/*" @change="handleAvatarUpload" style="display: none;">
+              <button class="avatar-edit-btn" @click="triggerAvatarUpload">
+                <i class="fas fa-camera"></i>
+              </button>
+            </div>
+            <p class="avatar-hint">点击头像可上传新图片</p>
+          </div>
+
+          <div class="form-group">
+            <label for="nickname">昵称</label>
+            <input type="text" id="nickname" v-model="tempUserInfo.nickname" placeholder="请输入您的昵称">
+          </div>
+
+          <div class="form-group">
+            <label for="bio">个人简介</label>
+            <textarea id="bio" v-model="tempUserInfo.bio" placeholder="这个人好懒，什么也不写(￢︿̫̿￢☆)"></textarea>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="school">学校</label>
+              <input type="text" id="school" v-model="tempUserInfo.school" placeholder="请输入您的学校">
+            </div>
+
+            <div class="form-group">
+              <label for="major">专业</label>
+              <input type="text" id="major" v-model="tempUserInfo.major" placeholder="请输入您的专业">
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn-cancel" @click="closeProfileModal">取消</button>
+          <button class="btn-save" @click="saveProfile">保存更改</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -217,6 +267,14 @@ export default {
       activeHistoryIndex: 0,
       currentTopic: '软件需求规格说明书',
       inputMessage: '',
+      showProfileModal: false,
+      tempUserInfo: {
+        nickname: '',
+        bio: '',
+        school: '',
+        major: '',
+        avatarUrl: null
+      },
       messages: [
         {
           type: 'bot',
@@ -257,7 +315,11 @@ export default {
       isDragging: false,
       startY: 0,
       startHeight: 0,
-      userInfo: null
+      userInfo: null,
+      tempAvatarUrl: null,
+      avatarFile: null,
+      defaultAvatar: null,
+      isUpdating: false
     }
   },
   mounted() {
@@ -268,6 +330,9 @@ export default {
     this.loadChatHistories();
   },
   methods: {
+    getInitial(name) {
+      return name.charAt(0).toUpperCase();
+    },
     async loadUserInfo() {
       try {
         const userId = localStorage.getItem("userId");
@@ -277,33 +342,43 @@ export default {
         }
 
         // 1. 尝试从API获取用户信息
-        const response = await axios.get(`http://localhost:8080/api/user/profile/${userId}`);
+        const response = await axios.get(`http://localhost:8080/api/user/profile/${userId}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('userToken')}`
+          }
+        });
 
         if (response.data.code === 200) {
           const userData = response.data.data;
 
-          // 2. 前端判断是否是新用户（检查关键字段是否为空）
-          const isNewUser = !userData.school ||
+          // 2. 判断是否是新用户（检查关键字段是否为空）
+          const isNewUser = !userData.nickname ||
+              !userData.school ||
               !userData.major ||
               !userData.bio;
 
-          // 3. 根据判断结果处理数据
-          if (isNewUser) {
-            this.userInfo = {
-              nickname: userData.nickname || "新用户",
-              bio: "请完善个人信息",
-              school: "",
-              major: "",
-              avatarUrl: userData.avatarUrl || null
-            };
-            this.$message.warning("请完善您的个人信息");
-          } else {
-            this.userInfo = userData;
-          }
+          // 3. 处理用户数据
+          this.userInfo = {
+            id: userData.id,
+            userId: userData.userId,
+            nickname: userData.nickname ||"",
+            avatarUrl: userData.avatarUrl || this.defaultAvatar,
+            bio: userData.bio ||"",
+            school: userData.school || "",
+            major: userData.major || "",
+            createdAt: userData.createdAt,
+            updatedAt: userData.updatedAt
+          };
 
-          // 4. 更新本地存储
+          // 4. 更新本地存储和UI
           localStorage.setItem("userInfo", JSON.stringify(this.userInfo));
           this.updateUserCard();
+
+          // 如果是新用户，提示完善信息
+          if (isNewUser) {
+            this.$message.warning("请完善您的个人信息");
+            this.goToProfileSettings(); // 自动打开个人设置模态框
+          }
         }
       } catch (error) {
         console.error("获取用户信息出错:", error);
@@ -329,41 +404,63 @@ export default {
     updateUserCard() {
       if (!this.userInfo) return;
 
-      // 更新头像显示
-      const avatarElements = document.querySelectorAll('.user-avatar, .user-card-avatar');
-      avatarElements.forEach(el => {
-        el.textContent = this.userInfo.nickname
-            ? this.userInfo.nickname.substring(0, 1).toUpperCase()
-            : (this.userInfo.username
-                ? this.userInfo.username.substring(0, 1).toUpperCase()
-                : 'U');
-      });
+      // 使用requestAnimationFrame确保DOM更新时机
+      requestAnimationFrame(() => {
+        // 头像更新（改用更可靠的属性设置方式）
+        const avatarElements = document.querySelectorAll('[class*="avatar"]');
+        avatarElements.forEach(el => {
+          if (this.userInfo.avatarUrl) {
+            // 完全替换img的src属性（如果使用img标签）
+            if (el.tagName === 'IMG') {
+              el.src = `${this.userInfo.avatarUrl.split('?')[0]}?t=${Date.now()}`;
+            }
+            // 处理背景图方式
+            else {
+              el.style.backgroundImage = `url('${this.userInfo.avatarUrl}')`;
+              el.style.backgroundSize = 'cover';
+              el.style.backgroundPosition = 'center';
+              el.innerHTML = ''; // 清空可能存在的文字
+            }
+          } else {
+            // 处理默认头像逻辑
+            el.style.backgroundImage = 'none';
+            const initial = this.userInfo.nickname?.charAt(0) ||
+                this.userInfo.username?.charAt(0) || 'U';
+            el.textContent = initial.toUpperCase();
+          }
+        });
 
-      // 更新用户名显示
-      const nameElements = document.querySelectorAll('.user-name, .user-card-info h3');
-      nameElements.forEach(el => {
-        el.textContent = this.userInfo.nickname || this.userInfo.username || '用户';
-      });
+        // 用户名更新（更健壮的选择器）
+        const nameSelectors = [
+          '.user-name',
+          '.user-card-info h3',
+          '[data-user-name]'
+        ].join(',');
 
-      // 更新其他信息
-      const bioElement = document.querySelector('.user-card-info p');
-      if (bioElement) {
-        bioElement.textContent = [
-          this.userInfo.bio || '',
-          this.userInfo.school || '',
-          this.userInfo.major || ''
-        ].filter(Boolean).join(' · ');
-      }
+        document.querySelectorAll(nameSelectors).forEach(el => {
+          el.textContent = this.userInfo.nickname || this.userInfo.username || '用户';
+        });
+
+        // 其他信息更新
+        const bioSelectors = [
+          '.user-bio',
+          '.user-card-info p',
+          '[data-user-bio]'
+        ].join(',');
+
+        document.querySelectorAll(bioSelectors).forEach(el => {
+          el.textContent = [
+            this.userInfo.bio || '',
+            this.userInfo.school || '',
+            this.userInfo.major || ''
+          ].filter(Boolean).join(' · ');
+        });
+      });
     },
     async loadChatHistories() {
       try {
         const userId = localStorage.getItem("userId");
         const token = localStorage.getItem("userToken");
-
-        if (!userId || !token) {
-          this.$message.warning("请先登录");
-          return;
-        }
 
         const response = await axios.post('http://localhost:8080/api/chat/sessions', {
           userId: parseInt(userId),
@@ -406,14 +503,167 @@ export default {
       }
     },
     goToProfileSettings() {
-      const userId = localStorage.getItem("userId");
-      if (!userId) {
-        this.$router.push('/Login');
+      this.showProfileModal = true;
+      // 复制当前用户信息到临时对象
+      this.tempUserInfo = {
+        nickname: this.userInfo?.nickname || '',
+        bio: this.userInfo?.bio || '',
+        school: this.userInfo?.school || '',
+        major: this.userInfo?.major || '',
+        avatarUrl: this.userInfo?.avatarUrl || null
+      };
+      this.tempAvatarUrl = this.userInfo?.avatarUrl || null;
+      this.avatarFile = null;
+    },
+    closeProfileModal() {
+      this.showProfileModal = false;
+    },
+
+    triggerAvatarUpload() {
+      this.$refs.avatarInput.click();
+    },
+
+// 修改handleAvatarUpload方法，添加压缩逻辑
+    async handleAvatarUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      // 验证文件类型和大小
+      if (!file.type.match('image.*')) {
+        this.$message.error('请选择有效的图片文件');
         return;
       }
-      this.$router.push({
-        path: "/profileSettings",
-        query: { userId: localStorage.getItem("userId") }
+      if (file.size > 2 * 1024 * 1024) {
+        this.$message.error('图片大小不能超过2MB');
+        return;
+      }
+
+      // 压缩图片
+      try {
+        const compressedFile = await this.compressImage(file);
+        this.avatarFile = compressedFile;
+
+        // 创建预览
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          this.tempAvatarUrl = e.target.result;
+        };
+        reader.readAsDataURL(compressedFile);
+      } catch (error) {
+        console.error('图片压缩失败:', error);
+        this.$message.error('图片处理失败');
+      }
+    },
+
+// 图片压缩方法
+    compressImage(file, maxWidth = 800, quality = 0.7) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const img = new Image();
+          img.src = event.target.result;
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const scale = Math.min(maxWidth / img.width, 1);
+            canvas.width = img.width * scale;
+            canvas.height = img.height * scale;
+
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+            canvas.toBlob(
+                (blob) => resolve(blob),
+                file.type,
+                quality
+            );
+          };
+        };
+        reader.readAsDataURL(file);
+      });
+    },
+
+    async saveProfile() {
+      if (this.isUpdating) return;
+      this.isUpdating = true;
+
+      try {
+        const userId = localStorage.getItem("userId");
+        if (!userId) {
+          this.$router.push("/Login");
+          return;
+        }
+
+        // 准备更新数据
+        const updateData = {
+          userId: userId,
+          nickname: this.tempUserInfo.nickname,
+          bio: this.tempUserInfo.bio,
+          school: this.tempUserInfo.school,
+          major: this.tempUserInfo.major
+        };
+
+        // 如果有新头像文件，将base64编码的字符串传给后端
+        if (this.avatarFile) {
+          const base64Avatar = await this.readFileAsBase64(this.avatarFile);
+          updateData.avatarBase64 = base64Avatar;
+          // 确保不发送avatarUrl
+          delete updateData.avatarUrl;
+        } else if (this.tempUserInfo.avatarUrl) {
+          updateData.avatarUrl = this.tempUserInfo.avatarUrl;
+          // 确保不发送avatarBase64
+          delete updateData.avatarBase64;
+        }
+
+        // 直接更新用户信息
+        const updateResponse = await axios.put(
+            'http://localhost:8080/api/user/profile',
+            updateData,
+            {
+              headers: {
+                'Authorization': `Bearer ${localStorage.getItem('userToken')}`,
+                'Content-Type': 'application/json'
+              }
+            }
+        );
+
+        if (updateResponse.data.code === 200) {
+          this.$message.success('个人信息更新成功');
+
+          this.userInfo = JSON.parse(JSON.stringify({
+            ...this.userInfo,
+            ...updateResponse.data.data,
+            avatarUrl: updateResponse.data.data.avatarUrl
+                ? `${updateResponse.data.data.avatarUrl}?t=${Date.now()}`
+                : null
+          }));
+
+          localStorage.setItem("userInfo", JSON.stringify(this.userInfo));
+
+          // 下一帧再更新 DOM（确保 Vue 已完成渲染）
+          this.$nextTick(() => {
+            this.updateUserCard();
+            this.$forceUpdate(); // 核弹级保障（慎用）
+          });
+
+          this.closeProfileModal();
+        } else {
+          this.$message.error(updateResponse.data.message || '更新失败');
+        }
+      } catch (error) {
+        console.error('保存个人信息出错:', error);
+        this.$message.error('保存失败: ' + (error.response?.data?.message || error.message));
+      } finally {
+        this.isUpdating = false;
+      }
+
+    },
+    // 新增方法：将文件读取为base64
+    readFileAsBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = (error) => reject(error);
+        reader.readAsDataURL(file);
       });
     },
     // 修改退出登录功能
@@ -456,13 +706,8 @@ export default {
     },
     setActiveHistory(index) {
       this.activeHistoryIndex = index;
-      this.currentTopic = this.chatHistories[index];
-
-      // 假设chatHistories中的每个项都有一个sessionId属性
-      const sessionId = this.chatHistories[index].sessionId;
-      if (sessionId) {
-        this.loadSessionDetails(sessionId);
-      }
+      this.currentTopic = this.chatHistories[index].title;
+      this.loadSessionDetails(this.chatHistories[index].sessionId);
 
       if (window.innerWidth <= 768) {
         this.isMobileMenuOpen = false;
@@ -497,9 +742,14 @@ export default {
         this.activeHistoryIndex = -1;
         this.scrollToBottom();
 
-        // 自动生成一个历史记录条目
+        // 生成新的会话ID (实际应从API获取)
+        const newSessionId = Date.now(); // 临时方案，实际应从API获取
         const newHistoryTitle = `新会话 ${this.getCurrentTime()}`;
         this.chatHistories.unshift(newHistoryTitle);
+        this.chatHistories.unshift({
+          title: newHistoryTitle,
+          sessionId: newSessionId
+        });
         this.activeHistoryIndex = 0;
 
       }, 800); // 800毫秒的延迟模拟加载过程
@@ -507,40 +757,74 @@ export default {
     async sendMessage() {
       if (this.inputMessage.trim() === '') return;
 
+      // 保存用户消息内容
+      const userMessageContent = this.inputMessage;
+
+      // 清空输入框
+      this.inputMessage = '';
+
       // 添加用户消息
-      this.messages.push({
+      const userMessage = {
         type: 'user',
-        content: this.inputMessage,
+        content: userMessageContent,
         time: this.getCurrentTime()
-      });
+      };
+      this.messages.push(userMessage);
+
+      // 添加加载中的系统消息
+      const loadingMessage = {
+        type: 'system',
+        content: '正在思考中...',
+        time: this.getCurrentTime()
+      };
+      this.messages.push(loadingMessage);
+      this.scrollToBottom();
 
       try {
         const userId = localStorage.getItem("userId");
-        const response = await axios.post('http://localhost:8080/api/chat/ask', {
-          question: this.inputMessage,
-          agentId: 1, // 确保 agentId 有效
-          userId: parseInt(userId) // 确保 userId 已传
-        }, {
+        const sessionId = this.activeHistoryIndex >= 0
+            ? this.chatHistories[this.activeHistoryIndex].sessionId
+            : null;
+
+        // 修改为GET请求，参数通过URL传递
+        const response = await axios.get('http://localhost:8080/api/chat/stream_chat', {
+          params: {  // 使用params将参数转为查询字符串
+            message: userMessageContent,
+            userId: userId,
+            sessionId: sessionId
+          },
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('userToken')}`, // 检查 Token
+            'Authorization': `Bearer ${localStorage.getItem('userToken')}`
           }
         });
 
-        // 添加判空逻辑
-        if (response.data?.data?.answer) {
+        // 移除加载消息
+        this.messages = this.messages.filter(msg => msg.content !== '正在思考中...');
+
+        if (response.data?.code === 200 && response.data?.data?.answer) {
+          // 添加AI回复
           this.messages.push({
             type: 'bot',
             content: response.data.data.answer,
-            time: this.getCurrentTime()
+            time: this.getCurrentTime(),
+            agent: '通用助手'
           });
         } else {
           console.error("接口返回数据异常:", response.data);
+          this.$message.error("获取回答失败: " + (response.data?.message || '未知错误'));
         }
       } catch (error) {
-        console.error("完整的错误详情:", error.response?.data); // 打印后端返回的具体错误
-        this.$message.error("提问失败: " + (error.response?.data?.message || error.message));
+        console.error("完整的错误详情:", error.response?.data);
+        alert("提问失败: " + (error.response?.data?.message || error.message));
+
+        // 移除加载消息并显示错误消息
+        this.messages = this.messages.filter(msg => msg.content !== '正在思考中...');
+        this.messages.push({
+          type: 'system',
+          content: '请求失败: ' + (error.response?.data?.message || error.message),
+          time: this.getCurrentTime()
+        });
       } finally {
-        this.inputMessage = '';
         this.scrollToBottom();
       }
     },
@@ -893,7 +1177,7 @@ body {
   position: absolute;
   bottom: 80px;
   left: 20px;
-  width: 240px;
+  width: 280px;
   background-color: white;
   border-radius: 10px;
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
@@ -1407,5 +1691,202 @@ body {
 /* 过渡效果 */
 .message {
   transition: all 0.3s ease;
+}
+/* 模态框样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(5px);
+  animation: fade-in 0.3s ease-out;
+}
+
+.profile-modal {
+  background-color: white;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  animation: slide-up 0.3s ease-out;
+}
+
+.modal-header {
+  padding: 20px;
+  border-bottom: 1px solid var(--light-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h3 {
+  font-size: 18px;
+  color: var(--dark-color);
+  margin: 0;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--mid-gray);
+  font-size: 18px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.modal-close:hover {
+  color: var(--primary-color);
+}
+
+.modal-content {
+  padding: 20px;
+}
+
+.avatar-upload {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.avatar-preview {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background-color: var(--primary-color);
+  background-size: cover;
+  background-position: center;
+  position: relative;
+  margin-bottom: 10px;
+  border: 3px solid white;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+.avatar-edit-btn {
+  position: absolute;
+  bottom: 5px;
+  right: 5px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.avatar-edit-btn:hover {
+  background-color: var(--secondary-color);
+  transform: scale(1.1);
+}
+
+.avatar-hint {
+  font-size: 12px;
+  color: var(--mid-gray);
+  margin: 0;
+}
+
+.form-group {
+  margin-bottom: 15px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: var(--dark-color);
+  font-weight: 500;
+}
+
+.form-group input,
+.form-group textarea {
+  width: 100%;
+  padding: 12px 15px;
+  border: 1px solid var(--light-color);
+  border-radius: 8px;
+  font-size: 14px;
+  transition: border-color 0.2s;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.form-group textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.form-row {
+  display: flex;
+  gap: 15px;
+}
+
+.form-row .form-group {
+  flex: 1;
+}
+
+.modal-footer {
+  padding: 15px 20px;
+  border-top: 1px solid var(--light-color);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.btn-cancel,
+.btn-save {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-cancel {
+  background-color: var(--light-color);
+  color: var(--mid-gray);
+  border: none;
+}
+
+.btn-cancel:hover {
+  background-color: #e9ecef;
+}
+
+.btn-save {
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+}
+
+.btn-save:hover {
+  background-color: var(--secondary-color);
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .profile-modal {
+    width: 95%;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 15px;
+  }
 }
 </style>

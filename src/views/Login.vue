@@ -118,10 +118,10 @@ const clearError = () => {
 // 滑动动画
 const mySwitch = () => {
   if (flag.value) {
-    preRef.value.style.background = '#c9e0ed'
+    preRef.value.style.background = '#c2e9fb'
     preRef.value.style.transform = 'translateX(100%)'
   } else {
-    preRef.value.style.background = '#edd4dc'
+    preRef.value.style.background = '#a1c4fd'
     preRef.value.style.transform = 'translateX(0%)'
   }
   flag.value = !flag.value
@@ -216,7 +216,7 @@ html,
   overflow-x: hidden;
   display: flex;
   /* 渐变方向从左到右 */
-  background: linear-gradient(to right, rgb(247, 209, 215), rgb(191, 227, 241));
+  background:linear-gradient(220.55deg, #7CF7FF 0%, #4B73FF 100%);
 }
 
 span {
@@ -292,7 +292,10 @@ span {
   top: 0;
   z-index: 99;
   border-radius: 4px;
-  background-color: #edd4dc;
+  background-color: #a1c4fd;
+  &.login-mode {
+    background-color: #3f37c9;
+  }
   box-shadow: 2px 1px 19px rgba(0, 0, 0, .1);
   /* 动画过渡，先加速再减速 */
   transition: 0.5s ease-in-out;
@@ -392,7 +395,7 @@ input {
 
 input:focus {
   /* 光标颜色 */
-  color: #b0cfe9;
+  color: black;
 
 }
 
@@ -415,7 +418,10 @@ button {
   line-height: 30px;
   border: none;
   border-radius: 4px;
-  background-color: #69b3f0;
+  background-color: var(--primary-color);
+  &:hover {
+    background-color: var(--secondary-color);
+  }
   color: white;
 }
 
