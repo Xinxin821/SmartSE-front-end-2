@@ -212,7 +212,7 @@ export default {
           description: '指导测试计划制定、用例设计，分析测试覆盖率和测试报告，提供测试策略建议。'
         },
         {
-          icon: 'fas fa-vial',
+          icon: 'fas fa-code',
               title: '代码评审智能体',
             description: '智能分析代码质量、检测潜在缺陷并提供优化建议，提升代码健壮性和可维护性，实现高效协同评审。'
         }

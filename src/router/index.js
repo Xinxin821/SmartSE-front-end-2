@@ -2,7 +2,6 @@ import { createRouter, createWebHistory } from 'vue-router'
 import Home from '../views/Home.vue'
 import Login from '../views/Login.vue'
 import Function from '../views/Function.vue';
-import ProfileSettings from '../views/ProfileSettiongs.vue'
 
 const routes = [
     {
@@ -21,11 +20,6 @@ const routes = [
         component: () => import('@/views/Function.vue'),
         props: true // 将路由参数作为 props 传递给组件
     },
-    {
-        path: '/profileSettings',
-        name: 'ProfileSettings',
-        component: ProfileSettings // 添加 ProfileSettings 路由
-    }
 ]
 
 const router = createRouter({
