@@ -181,25 +181,41 @@ const handleRegister = async () => {
 
 // 登录方法
 const handleLogin = async () => {
+  if (loading.value) return
+  loading.value = true
+
   try {
     const response = await axios.post('http://localhost:8080/api/user/login', {
       username: loginForm.value.username,
       password: loginForm.value.password
     });
+
     if (response.data.code === 200) {
-      const { userId, username } = response.data.data; // 确保解构出 userId
+      const { userId, username } = response.data.data;
       console.log("登录成功，用户ID:", userId);
+      
+      // 存储必要的信息
       localStorage.setItem("userId", userId);
+      localStorage.setItem("userToken", response.data.data.token || 'dummy-token'); // 如果后端返回token的话
       localStorage.setItem("userInfo", JSON.stringify(response.data.data));
-      router.push('/function');
-      /*router.push(`/function/${userId}`)*/
+      
+      // 显示成功消息
+      showError('登录成功！正在跳转...');
+      
+      // 延迟跳转以显示成功消息
+      setTimeout(() => {
+        router.push('/function');
+      }, 1000);
     } else {
-      console.error("登录失败:", response.data.message);
+      throw new Error(response.data.message || '登录失败');
     }
   } catch (error) {
     console.error('登录错误:', error);
+    showError(error.response?.data?.message || error.message || '登录失败，请重试');
+  } finally {
+    loading.value = false;
   }
-};
+}
 </script>
 
 <style scoped>

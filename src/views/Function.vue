@@ -60,13 +60,31 @@
           <h3>对话历史</h3>
           <div class="chat-history">
             <div
-                v-for="(history, index) in chatHistories"
-                :key="index"
-                class="chat-history-item"
-                :class="{ 'active': activeHistoryIndex === index }"
-                @click="setActiveHistory(index)"
+              v-for="(history, index) in chatHistories"
+              :key="history.sessionId"
+              class="chat-history-item"
+              :class="{ 'active': activeHistoryIndex === index }"
             >
-              <span>{{ history }}</span>
+              <div class="history-content" @click="setActiveHistory(index)">
+                <div class="history-title">{{ history.title }}</div>
+                <div class="history-time">{{ history.time }}</div>
+              </div>
+              <div class="history-actions">
+                <button class="action-btn" @click.stop="handleRename(history)" title="重命名">
+                  <i class="fas fa-edit"></i>
+                </button>
+                <button class="action-btn" @click.stop="handleDelete(history)" title="删除">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </div>
+            </div>
+            <div v-if="chatHistories.length === 0" class="no-history">
+              <i class="fas fa-comments"></i>
+              <p>暂无对话历史</p>
+              <button class="create-chat-btn" @click="newChat">
+                <i class="fas fa-plus"></i>
+                创建新会话
+              </button>
             </div>
           </div>
         </div>
@@ -151,20 +169,52 @@
         </div>
       </div>
 
-      <!-- 聊天内容区域 -->
-      <div class="chat-container" id="chatContainer">
+      <!-- 欢迎页面 - 当没有会话时显示 -->
+      <div v-if="chatHistories.length === 0" class="welcome-page">
+        <div class="welcome-content">
+          <div class="welcome-header">
+            <div class="logo-container">
+              <i class="fas fa-robot"></i>
+              <div class="logo-text">
+                <h1>SmartSE</h1>
+                <p>智能软件工程助手</p>
+              </div>
+            </div>
+            <p class="welcome-description">
+              基于大语言模型的智能助手，为您的软件工程学习提供全方位支持
+            </p>
+          </div>
+
+         
+
+          <div class="action-section">
+            <button class="start-chat-btn" @click="newChat">
+              <i class="fas fa-plus"></i>
+              开始新对话
+            </button>
+            <p class="action-hint">或者从左侧菜单选择其他功能</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 聊天内容区域 - 只在有会话时显示 -->
+      <div v-else class="chat-container" id="chatContainer">
         <!-- 动态渲染消息 -->
         <div
-            v-for="(message, index) in messages"
-            :key="index"
-            class="message"
-            :class="[
-              message.type === 'user' ? 'user-message' :
-              message.type === 'system' ? 'system-message' : 'bot-message',
-              { 'is-new': message.isNew }
-            ]"
+          v-for="(message, index) in messages"
+          :key="index"
+          class="message"
+          :class="[
+            message.type === 'user' ? 'user-message' :
+            message.type === 'system' ? 'system-message' : 'bot-message',
+            { 'is-new': message.isNew },
+            { 'loading': message.isLoading }
+          ]"
+        >
+          <div 
+            class="message-content"
+            :class="{ 'loading': message.isLoading }"
           >
-          <div class="message-content">
             {{ message.content }}
           </div>
           <div class="message-info">
@@ -173,41 +223,91 @@
           </div>
         </div>
       </div>
+
+      <!-- 输入框部分 - 只在有会话时显示 -->
+      <div v-if="chatHistories.length > 0" class="input-fixed-container" id="inputContainer" ref="inputContainer">
+        <div class="input-tools">
+          <button class="input-tool" title="上传文件" @click="uploadFile">
+            <i class="fas fa-paperclip"></i>
+          </button>
+          <button class="input-tool" title="上传图片" @click="uploadImage">
+            <i class="fas fa-image"></i>
+          </button>
+          <button class="input-tool" title="上传代码" @click="uploadCode">
+            <i class="fas fa-code"></i>
+          </button>
+          <button class="input-tool" title="录音" @click="startRecording">
+            <i class="fas fa-microphone"></i>
+          </button>
+        </div>
+
+        <textarea
+            placeholder="请输入您的问题或指令..."
+            v-model="inputMessage"
+            @keyup.enter="sendMessage"
+        ></textarea>
+
+        <button class="input-submit" @click="sendMessage">发送</button>
+      </div>
     </div>
 
-    <!-- 可拖动输入框 -->
-    <div class="input-fixed-container" id="inputContainer" ref="inputContainer">
-      <div class="input-tools">
-        <button class="input-tool" title="上传文件" @click="uploadFile">
-          <i class="fas fa-paperclip"></i>
-        </button>
-        <button class="input-tool" title="上传图片" @click="uploadImage">
-          <i class="fas fa-image"></i>
-        </button>
-        <button class="input-tool" title="上传代码" @click="uploadCode">
-          <i class="fas fa-code"></i>
-        </button>
-        <button class="input-tool" title="录音" @click="startRecording">
-          <i class="fas fa-microphone"></i>
-        </button>
+    <!-- 重命名对话框 -->
+    <div v-if="showRenameDialog" class="dialog-overlay">
+      <div class="rename-dialog" @click.stop>
+        <div class="dialog-header">
+          <h3>重命名会话</h3>
+          <button class="dialog-close" @click="cancelRename">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="dialog-content">
+          <div class="input-group">
+            <label for="sessionTitle">会话名称</label>
+            <input 
+              id="sessionTitle"
+              v-model="newSessionTitle" 
+              type="text" 
+              placeholder="请输入新的会话名称"
+              @keyup.enter="confirmRename"
+              @keyup.esc="cancelRename"
+              ref="sessionTitleInput"
+            >
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <button class="btn-cancel" @click="cancelRename">取消</button>
+          <button class="btn-confirm" @click="confirmRename">确定</button>
+        </div>
       </div>
+    </div>
 
-      <textarea
-          placeholder="请输入您的问题或指令..."
-          v-model="inputMessage"
-          @keyup.enter="sendMessage"
-      ></textarea>
-
-      <button class="input-submit" @click="sendMessage">发送</button>
+    <!-- 删除对话框 -->
+    <div v-if="showDeleteDialog" class="dialog-overlay">
+      <div class="delete-dialog" @click.stop>
+        <div class="dialog-header">
+          <h3>确认删除</h3>
+          <button class="dialog-close" @click="cancelDelete">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="dialog-content">
+          <p>确定要删除这个会话吗？此操作不可恢复。</p>
+        </div>
+        <div class="dialog-footer">
+          <button class="btn-cancel" @click="cancelDelete">取消</button>
+          <button class="btn-confirm" @click="confirmDelete">确定</button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script>
 import axios from 'axios';
+import { ElMessage } from 'element-plus';
+
 export default {
   name: 'FunctionPage',
-  props: ['userId'],
   data() {
     return {
       isSidebarCollapsed: false,
@@ -215,59 +315,60 @@ export default {
       showUserCard: false,
       activeMenu: 'chat',
       activeHistoryIndex: 0,
-      currentTopic: '软件需求规格说明书',
+      currentTopic: '欢迎使用SmartSE系统',
       inputMessage: '',
-      messages: [
-        {
-          type: 'bot',
-          content: '欢迎使用SmartSE软件工程课程智能助手！我可以帮助您解答软件工程相关问题，提供课程支持。请问您需要了解什么内容？',
-          time: this.getCurrentTime(),
-          agent: '通用助手'
-        },
-        {
-          type: 'user',
-          content: '请解释一下软件需求规格说明书的主要结构和内容。',
-          time: this.getCurrentTime(),
-        },
-        {
-          type: 'bot',
-          content: '软件需求规格说明书(SRS)是软件开发过程中非常重要的文档，它详细描述了软件系统的功能、性能和约束条件。一个典型的SRS包含以下主要部分：\n\n1. 前言：包括文档的目的、范围、术语定义、参考文献等。\n2. 总体描述：提供产品的概述、功能、用户特征、约束条件等。\n3. 功能需求：详细描述系统的具体功能要求，通常按照不同功能模块进行组织。\n4. 非功能需求：包括性能、安全性、可用性、可维护性等方面的要求。\n5. 接口需求：描述系统与外部系统、用户的交互接口。\n6. 用例描述：通过用例来描述系统的行为和功能。\n\n您想了解其中任何特定部分的更多详情吗？',
-          time: this.getCurrentTime(),
-          agent: '概念解释智能体'
-        },
-        {
-          type: 'user',
-          content: '功能需求部分通常包含哪些具体内容？',
-          time: this.getCurrentTime(),
-        },
-        {
-          type: 'bot',
-          content: '功能需求部分是SRS中最核心的内容之一，详细描述系统应该做什么。通常包含以下具体内容：\n\n1. 功能列表：列出系统需要实现的所有功能，并可能按照优先级（如必须实现、重要功能、锦上添花）进行分类。\n\n2. 功能描述：对每个功能进行详细描述，包括：\n   - 功能ID和名称\n   - 功能的详细描述\n   - 输入和输出\n   - 前置条件和后置条件\n   - 功能的优先级\n\n3. 用户操作流程：描述用户如何与系统交互来实现特定功能的步骤。\n\n4. 业务规则：与功能相关的业务规则和约束条件。\n\n5. 异常处理：当出现错误或异常情况时系统应该如何响应。\n\n在您提供的需求文档中，功能需求部分按照不同模块（用户认证与管理、核心问答功能、检索增强功能、多智能体系统、习题解析功能）进行了组织，并使用了三级星号来表示不同优先级，这是一种非常清晰的组织方式。',
-          time: this.getCurrentTime(),
-          agent: '概念解释智能体'
-        }
-      ],
-      chatHistories: [
-        '软件需求规格说明书的结构',
-        '敏捷开发与瀑布模型的区别',
-        'UML类图如何表示继承关系',
-        '软件测试的主要方法',
-        '代码重构的最佳实践'
-      ],
-      isDragging: false,
-      startY: 0,
-      startHeight: 0,
-      userInfo: null
+      isLoading: false,
+      messages: [],
+      chatHistories: [],
+      userInfo: null,
+      showRenameDialog: false,
+      showDeleteDialog: false,
+      currentRenameSession: null,
+      currentDeleteSession: null,
+      newSessionTitle: '',
     }
   },
-  mounted() {
-    this.setupDragHandlers();
-    this.setupClickOutsideHandlers();
-    this.scrollToBottom();
-    this.loadUserInfo(); // 只调用一次
-    this.loadChatHistories();
+  beforeRouteEnter(to, from, next) {
+    // 路由守卫，确保用户已登录
+    const userId = localStorage.getItem("userId");
+    const token = localStorage.getItem("userToken");
+    
+    if (!userId || !token) {
+      next('/login');
+    } else {
+      next(vm => {
+        // 组件实例创建后执行
+        vm.initializeComponent();
+      });
+    }
   },
   methods: {
+    showErrorMessage(message) {
+      ElMessage.error(message);
+    },
+    
+    showSuccessMessage(message) {
+      ElMessage.success(message);
+    },
+    
+    showWarningMessage(message) {
+      ElMessage.warning(message);
+    },
+
+    async initializeComponent() {
+      try {
+        await this.loadUserInfo();
+        await this.loadChatHistories();
+        this.setupDragHandlers();
+        this.setupClickOutsideHandlers();
+        
+        // 移除自动加载欢迎消息的逻辑
+        this.scrollToBottom();
+      } catch (error) {
+        console.error('初始化失败:', error);
+        this.showErrorMessage('加载数据失败，请刷新页面重试');
+      }
+    },
     async loadUserInfo() {
       try {
         const userId = localStorage.getItem("userId");
@@ -296,7 +397,7 @@ export default {
               major: "",
               avatarUrl: userData.avatarUrl || null
             };
-            this.$message.warning("请完善您的个人信息");
+            // this.showWarningMessage("请完善您的个人信息");
           } else {
             this.userInfo = userData;
           }
@@ -361,48 +462,118 @@ export default {
         const token = localStorage.getItem("userToken");
 
         if (!userId || !token) {
-          this.$message.warning("请先登录");
+          this.showWarningMessage("请先登录");
+          this.$router.push('/login');
           return;
         }
 
         const response = await axios.post('http://localhost:8080/api/chat/sessions', {
-          userId: parseInt(userId),
+          userId: userId,
           page: 1,
           size: 10
-        }, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
         });
 
         if (response.data.code === 200) {
-          this.chatHistories = response.data.data || [];
+          console.log('Raw chat histories:', response.data.data);
+          
+          // 确保返回的数据是数组
+          const sessions = Array.isArray(response.data.data) ? response.data.data : [];
+          
+          this.chatHistories = sessions.map(session => ({
+            sessionId: session.sessionId || session.id,
+            title: session.title || session.sessionTitle || '新会话',
+            time: new Date(session.createdAt || session.createTime).toLocaleString(),
+            senderType: session.senderType || 'user'
+          }));
+
+          console.log('Mapped chat histories:', this.chatHistories);
+          
+          // 如果有历史记录，加载第一个会话
+          if (this.chatHistories.length > 0) {
+            this.activeHistoryIndex = 0;
+            this.currentTopic = this.chatHistories[0].title || '新会话';
+            await this.loadSessionDetails(this.chatHistories[0].sessionId);
+          }
         }
       } catch (error) {
-        this.$message.error("加载会话历史失败: " + (error.response?.data?.message || error.message));
+        console.error('加载会话历史失败:', error);
+        this.showErrorMessage("加载会话历史失败: " + (error.response?.data?.message || error.message));
       }
     },
     async loadSessionDetails(sessionId) {
       try {
-        const userId = localStorage.getItem("userId");
-        const response = await axios.post('http://localhost:8080/api/chat/history', {
-          userId: userId,
-          sessionId: sessionId,
-          page: 1,
-          size: 50
+        console.log('Loading session details for sessionId:', sessionId);
+        
+        const response = await axios.post('http://localhost:8080/api/chat/session/load', {
+          sessionId: sessionId.toString() // 确保是字符串
         });
 
-        if (response.data.code === 200 && response.data.data) {
-          this.messages = response.data.data.map(item => ({
-            type: item.senderType === 'user' ? 'user' : 'bot',
-            content: item.content,
-            time: new Date(item.createdAt).toLocaleTimeString(),
-            agent: item.agent || '通用助手'
-          }));
+        console.log('Session details response:', response.data);
+
+        if (response.data.code === 200) {
+          const sessionData = response.data.data;
+          
+          if (!sessionData) {
+            throw new Error('会话数据为空');
+          }
+
+          // 更新会话标题
+          this.currentTopic = sessionData.sessionTitle || sessionData.title || '新会话';
+          
+          // 确保 chatMessages 存在且是数组
+          const messages = sessionData.chatMessages || [];
+          if (!Array.isArray(messages)) {
+            console.warn('chatMessages is not an array:', messages);
+            this.messages = [];
+            return;
+          }
+
+          // 转换消息格式并过滤掉系统消息
+          this.messages = messages
+            .filter(msg => msg.senderType.toLowerCase() !== 'system') // 过滤掉系统消息
+            .map(msg => {
+              // 根据 senderType 确定消息类型
+              let type;
+              switch (msg.senderType.toLowerCase()) {
+                case 'user':
+                  type = 'user';
+                  break;
+                case 'assistant':
+                  type = 'bot';
+                  break;
+                default:
+                  type = 'system';
+              }
+
+              return {
+                type: type,
+                content: msg.content || '',
+                time: new Date(msg.createdAt).toLocaleTimeString(),
+                agent: type === 'bot' ? '智能助手' : undefined,
+                // 添加原始数据，以备需要
+                rawData: {
+                  id: msg.id,
+                  sessionId: msg.sessionId,
+                  senderType: msg.senderType,
+                  contentType: msg.contentType
+                }
+              };
+            });
+
+          this.scrollToBottom();
+        } else {
+          throw new Error(response.data.message || '加载会话失败');
         }
       } catch (error) {
-        console.error("获取会话详情失败:", error);
+        console.error("加载会话详情失败:", error);
+        this.showErrorMessage("加载失败: " + (error.response?.data?.message || error.message));
+        
+        // 如果加载失败，显示一条系统消息
+        this.messages = [{
+          type: 'system',
+          content: '加载会话失败，请重试或创建新会话',
+          time: this.getCurrentTime()
+        }];
       }
     },
     goToProfileSettings() {
@@ -452,95 +623,163 @@ export default {
         exercise: '习题解析',
         resource: '课程资源'
       };
-      return titles[menu] || '新会话';
+      return titles[menu] || '欢迎使用SmartSE系统';
     },
-    setActiveHistory(index) {
-      this.activeHistoryIndex = index;
-      this.currentTopic = this.chatHistories[index];
+    async setActiveHistory(index) {
+      try {
+        if (index < 0 || index >= this.chatHistories.length) {
+          console.warn('Invalid history index:', index);
+          return;
+        }
 
-      // 假设chatHistories中的每个项都有一个sessionId属性
-      const sessionId = this.chatHistories[index].sessionId;
-      if (sessionId) {
-        this.loadSessionDetails(sessionId);
-      }
+        // 如果点击的是当前活动的会话，不需要重新加载
+        if (index === this.activeHistoryIndex) {
+          console.log('Already on this session, skipping reload');
+          return;
+        }
 
-      if (window.innerWidth <= 768) {
-        this.isMobileMenuOpen = false;
+        const selectedHistory = this.chatHistories[index];
+        if (!selectedHistory || !selectedHistory.sessionId) {
+          console.warn('Invalid history data at index:', index);
+          return;
+        }
+
+        console.log('Switching to session:', selectedHistory);
+        
+        this.activeHistoryIndex = index;
+        this.currentTopic = selectedHistory.title || '新会话';
+
+        // 显示加载中的提示
+        this.messages = [{
+          type: 'system',
+          content: '正在加载会话历史...',
+          time: this.getCurrentTime()
+        }];
+
+        await this.loadSessionDetails(selectedHistory.sessionId);
+
+        if (window.innerWidth <= 768) {
+          this.isMobileMenuOpen = false;
+        }
+      } catch (error) {
+        console.error('切换会话失败:', error);
+        this.showErrorMessage('切换会话失败: ' + error.message);
       }
     },
-    newChat() {
-      // 先清空消息数组
-      this.messages = [];
+    async newChat() {
+      try {
+        const userId = localStorage.getItem("userId");
+        if (!userId) {
+          this.showWarningMessage("请先登录");
+          return;
+        }
 
-      // 添加加载状态
-      this.messages.push({
-        type: 'system',
-        content: '正在创建新会话...',
-        time: this.getCurrentTime()
-      });
+        this.messages = [{
+          type: 'system',
+          content: '正在创建新会话...',
+          time: this.getCurrentTime()
+        }];
 
-      // 模拟异步加载效果
-      setTimeout(() => {
-        // 移除加载状态
-        this.messages = [];
-
-        // 添加欢迎消息，带有动画效果
-        this.messages.push({
-          type: 'bot',
-          content: '欢迎使用SmartSE软件工程课程智能助手！这是一个全新的会话。请问您需要了解什么内容？',
-          time: this.getCurrentTime(),
-          agent: '通用助手',
-          isNew: true  // 标记为新消息，用于特殊样式
+        const response = await axios.post('http://localhost:8080/api/chat/session/create', {
+          userId: userId,
+          sessionTitle: `新会话 ${this.getCurrentTime()}`
         });
 
-        this.currentTopic = '新会话';
-        this.activeHistoryIndex = -1;
-        this.scrollToBottom();
+        if (response.data.code === 200) {
+          const sessionId = response.data.data.sessionId;
+          localStorage.setItem('currentSessionId', sessionId);
+          console.log('Created new session with ID:', sessionId);
 
-        // 自动生成一个历史记录条目
-        const newHistoryTitle = `新会话 ${this.getCurrentTime()}`;
-        this.chatHistories.unshift(newHistoryTitle);
-        this.activeHistoryIndex = 0;
+          const newSession = {
+            sessionId: sessionId,
+            title: response.data.data.sessionTitle || `新会话 ${this.getCurrentTime()}`,
+            time: this.getCurrentTime(),
+            senderType: 'system'
+          };
 
-      }, 800); // 800毫秒的延迟模拟加载过程
+          this.chatHistories.unshift(newSession);
+          this.activeHistoryIndex = 0;
+          this.currentTopic = newSession.title;
+
+          this.messages = [{
+            type: 'bot',
+            content: '欢迎使用SmartSE软件工程课程智能助手！这是一个全新的会话。请问您需要了解什么内容？',
+            time: this.getCurrentTime(),
+            agent: '通用助手',
+            isNew: true
+          }];
+
+          this.scrollToBottom();
+          return true; // 返回成功标志
+        } else {
+          throw new Error(response.data.message || '创建会话失败');
+        }
+      } catch (error) {
+        console.error("创建新会话失败:", error);
+        this.showErrorMessage("创建会话失败: " + (error.response?.data?.message || error.message));
+        return false; // 返回失败标志
+      }
     },
     async sendMessage() {
       if (this.inputMessage.trim() === '') return;
 
-      // 添加用户消息
+      let currentSessionId = null;
+      if (this.activeHistoryIndex >= 0 && this.chatHistories[this.activeHistoryIndex]) {
+        currentSessionId = this.chatHistories[this.activeHistoryIndex].sessionId;
+      }
+      
+      const userMessage = this.inputMessage;
       this.messages.push({
         type: 'user',
-        content: this.inputMessage,
+        content: userMessage,
         time: this.getCurrentTime()
       });
 
+      // 添加一个临时的"正在输入"消息
+      this.messages.push({
+        type: 'bot',
+        content: '正在思考...',
+        time: this.getCurrentTime(),
+        agent: '智能助手',
+        isLoading: true
+      });
+
+      this.inputMessage = ''; // 清空输入框
+      this.scrollToBottom();
+      
       try {
+        this.isLoading = true;
         const userId = localStorage.getItem("userId");
-        const response = await axios.post('http://localhost:8080/api/chat/ask', {
-          question: this.inputMessage,
-          agentId: 1, // 确保 agentId 有效
-          userId: parseInt(userId) // 确保 userId 已传
-        }, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('userToken')}`, // 检查 Token
-          }
+        
+        let url = `http://localhost:8080/api/chat/stream_chat?message=${encodeURIComponent(userMessage)}&userId=${userId}`;
+        
+        if (currentSessionId) {
+          url += `&sessionId=${currentSessionId}`;
+        }
+
+        console.log('Final request URL:', url);
+        
+        const response = await axios.get(url, {
+          responseType: 'text'
         });
 
-        // 添加判空逻辑
-        if (response.data?.data?.answer) {
-          this.messages.push({
-            type: 'bot',
-            content: response.data.data.answer,
-            time: this.getCurrentTime()
-          });
-        } else {
-          console.error("接口返回数据异常:", response.data);
-        }
+        // 移除临时的"正在输入"消息
+        this.messages = this.messages.filter(msg => !msg.isLoading);
+
+        // 添加实际的回复消息
+        this.messages.push({
+          type: 'bot',
+          content: response.data,
+          time: this.getCurrentTime(),
+          agent: '智能助手'
+        });
       } catch (error) {
-        console.error("完整的错误详情:", error.response?.data); // 打印后端返回的具体错误
-        this.$message.error("提问失败: " + (error.response?.data?.message || error.message));
+        console.error("发送消息失败:", error);
+        this.showErrorMessage("发送失败: " + (error.response?.data || error.message));
+        // 移除临时的"正在输入"消息
+        this.messages = this.messages.filter(msg => !msg.isLoading);
       } finally {
-        this.inputMessage = '';
+        this.isLoading = false;
         this.scrollToBottom();
       }
     },
@@ -664,7 +903,115 @@ export default {
       if (chatContainer) {
         chatContainer.scrollTop = chatContainer.scrollHeight;
       }
-    }
+    },
+    async renameSession(sessionId, newTitle) {
+      try {
+        const response = await axios.post('http://localhost:8080/api/chat/session/rename', {
+          sessionId: sessionId.toString(), // 确保是字符串
+          sessionTitle: newTitle
+        });
+
+        if (response.data.code === 200) {
+          const sessionIndex = this.chatHistories.findIndex(s => s.sessionId === sessionId);
+          if (sessionIndex !== -1) {
+            this.chatHistories[sessionIndex].title = newTitle;
+            if (this.activeHistoryIndex === sessionIndex) {
+              this.currentTopic = newTitle;
+            }
+          }
+          this.showSuccessMessage('重命名成功');
+        } else {
+          throw new Error(response.data.message || '重命名失败');
+        }
+      } catch (error) {
+        console.error("重命名会话失败:", error);
+        this.showErrorMessage("重命名失败: " + (error.response?.data?.message || error.message));
+      }
+    },
+    async deleteSession(sessionId) {
+      try {
+        const response = await axios.post('http://localhost:8080/api/chat/session/delete', {
+          sessionId: sessionId.toString() // 确保是字符串
+        });
+
+        if (response.data.code === 200) {
+          const sessionIndex = this.chatHistories.findIndex(s => s.sessionId === sessionId);
+          if (sessionIndex !== -1) {
+            this.chatHistories.splice(sessionIndex, 1);
+            
+            if (this.activeHistoryIndex === sessionIndex) {
+              if (this.chatHistories.length > 0) {
+                this.setActiveHistory(0);
+              } else {
+                this.messages = [];
+                this.currentTopic = '新会话';
+                this.activeHistoryIndex = -1;
+              }
+            } else if (this.activeHistoryIndex > sessionIndex) {
+              this.activeHistoryIndex--;
+            }
+          }
+          this.showSuccessMessage('删除成功');
+        } else {
+          throw new Error(response.data.message || '删除失败');
+        }
+      } catch (error) {
+        console.error("删除会话失败:", error);
+        this.showErrorMessage("删除失败: " + (error.response?.data?.message || error.message));
+      }
+    },
+    handleRename(history) {
+      this.currentRenameSession = history;
+      this.newSessionTitle = history.title;
+      this.showRenameDialog = true;
+      // 在下一个 tick 后聚焦输入框
+      this.$nextTick(() => {
+        const input = this.$refs.sessionTitleInput;
+        if (input) {
+          input.focus();
+          input.select(); // 全选文本内容
+        }
+      });
+    },
+    async confirmRename() {
+      if (!this.newSessionTitle.trim()) {
+        this.showErrorMessage('会话名称不能为空');
+        return;
+      }
+
+      try {
+        await this.renameSession(this.currentRenameSession.sessionId, this.newSessionTitle);
+        this.showRenameDialog = false;
+        this.currentRenameSession = null;
+        this.newSessionTitle = '';
+      } catch (error) {
+        console.error('重命名失败:', error);
+      }
+    },
+    cancelRename() {
+      this.showRenameDialog = false;
+      this.currentRenameSession = null;
+      this.newSessionTitle = '';
+    },
+    async handleDelete(history) {
+      this.currentDeleteSession = history;
+      this.showDeleteDialog = true;
+    },
+    async confirmDelete() {
+      try {
+        if (this.currentDeleteSession) {
+          await this.deleteSession(this.currentDeleteSession.sessionId);
+          this.showDeleteDialog = false;
+          this.currentDeleteSession = null;
+        }
+      } catch (error) {
+        console.error('删除失败:', error);
+      }
+    },
+    cancelDelete() {
+      this.showDeleteDialog = false;
+      this.currentDeleteSession = null;
+    },
   }
 }
 </script>
@@ -834,12 +1181,10 @@ body {
 
 .chat-history-item {
   padding: 10px 20px;
-  font-size: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   border-left: 4px solid transparent;
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   transition: all 0.2s;
 }
 
@@ -853,153 +1198,208 @@ body {
   color: var(--primary-color);
 }
 
-.user-profile {
-  padding: 15px 20px;
-  display: flex;
-  align-items: center;
-  border-top: 1px solid var(--light-color);
-  cursor: pointer;
-  position: relative;
-}
-
-.user-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background-color: var(--primary-color);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  margin-right: 12px;
-}
-
-.user-info {
+.history-content {
   flex: 1;
+  min-width: 0; /* 确保文本可以正确截断 */
+  cursor: pointer;
 }
 
-.user-name {
-  font-weight: bold;
-}
-
-.user-status {
-  font-size: 12px;
-  color: var(--mid-gray);
-}
-
-/* 用户信息卡片样式 */
-.user-card {
-  position: absolute;
-  bottom: 80px;
-  left: 20px;
-  width: 240px;
-  background-color: white;
-  border-radius: 10px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-  z-index: 100;
-  animation: slide-up 0.3s ease-out;
-}
-
-@keyframes slide-up {
-  0% { transform: translateY(20px); opacity: 0; }
-  100% { transform: translateY(0); opacity: 1; }
-}
-
-.user-card-header {
-  padding: 15px;
+.history-actions {
   display: flex;
-  align-items: center;
-  border-bottom: 1px solid var(--light-color);
-  position: relative;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 0.2s;
 }
 
-.user-card-avatar {
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  background-color: var(--primary-color);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  margin-right: 12px;
-  font-size: 18px;
+.chat-history-item:hover .history-actions {
+  opacity: 1;
 }
 
-.user-card-info h3 {
-  margin: 0;
-  font-size: 18px;
-}
-
-.user-card-info p {
-  margin: 5px 0 0;
-  font-size: 14px;
-  color: var(--mid-gray);
-}
-
-.user-card-close {
-  position: absolute;
-  top: 15px;
-  right: 15px;
+.action-btn {
   background: none;
   border: none;
+  padding: 4px;
   cursor: pointer;
   color: var(--mid-gray);
-  font-size: 16px;
+  transition: all 0.2s;
+  border-radius: 4px;
 }
 
-.user-card-content {
-  padding: 15px;
-}
-
-.user-stats {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
-
-.stat-item {
-  text-align: center;
-  width: 30%;
-}
-
-.stat-value {
-  font-size: 24px;
-  font-weight: bold;
+.action-btn:hover {
   color: var(--primary-color);
+  background-color: rgba(67, 97, 238, 0.1);
 }
 
-.stat-label {
+.history-title {
+  font-weight: 500;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-time {
   font-size: 12px;
   color: var(--mid-gray);
 }
 
-.user-menu {
-  display: flex;
-  flex-direction: column;
+/* 确保激活状态下的按钮也可见 */
+.chat-history-item.active .history-actions {
+  opacity: 1;
 }
 
-.user-menu-item {
-  padding: 10px 15px;
+/* 重命名对话框样式 */
+.dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 999;
   display: flex;
   align-items: center;
-  text-decoration: none;
+  justify-content: center;
+}
+
+.rename-dialog {
+  background: white;
+  width: 400px;
+  max-width: 90%;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  animation: dialog-pop 0.3s ease-out;
+}
+
+@keyframes dialog-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.dialog-header {
+  padding: 20px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dialog-header h3 {
+  margin: 0;
+  font-size: 18px;
   color: var(--dark-color);
-  border-radius: 5px;
+  font-weight: 600;
+}
+
+.dialog-close {
+  background: none;
+  border: none;
+  padding: 8px;
+  cursor: pointer;
+  color: var(--mid-gray);
+  border-radius: 6px;
   transition: all 0.2s;
 }
 
-.user-menu-item:hover {
-  background-color: var(--light-color);
+.dialog-close:hover {
+  background-color: #f5f5f5;
+  color: var(--dark-color);
 }
 
-.user-menu-item i {
-  margin-right: 10px;
-  width: 20px;
-  text-align: center;
-  color: var(--primary-color);
+.dialog-content {
+  padding: 20px;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.input-group label {
+  font-size: 14px;
+  color: var(--mid-gray);
+  font-weight: 500;
+}
+
+.input-group input {
+  padding: 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.input-group input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.1);
+}
+
+.dialog-footer {
+  padding: 20px;
+  border-top: 1px solid #eee;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.btn-cancel, .btn-confirm {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-cancel {
+  background-color: #f5f5f5;
+  border: none;
+  color: var(--mid-gray);
+}
+
+.btn-cancel:hover {
+  background-color: #ebebeb;
+  color: var(--dark-color);
+}
+
+.btn-confirm {
+  background-color: var(--primary-color);
+  border: none;
+  color: white;
+}
+
+.btn-confirm:hover {
+  background-color: var(--secondary-color);
+  transform: translateY(-1px);
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .rename-dialog {
+    width: 90%;
+    margin: 20px;
+  }
+  
+  .dialog-header {
+    padding: 15px;
+  }
+  
+  .dialog-content {
+    padding: 15px;
+  }
+  
+  .dialog-footer {
+    padding: 15px;
+  }
 }
 
 /* 主内容区样式 */
@@ -1098,6 +1498,8 @@ body {
   animation: fade-in 0.3s ease-in-out;
   display: flex;
   flex-direction: column;
+  opacity: 1;
+  transition: opacity 0.3s ease;
 }
 
 @keyframes fade-in {
@@ -1119,6 +1521,7 @@ body {
   box-shadow: var(--shadow);
   position: relative;
   max-width: 80%;
+  transition: all 0.3s ease;
 }
 
 .user-message .message-content {
@@ -1407,5 +1810,603 @@ body {
 /* 过渡效果 */
 .message {
   transition: all 0.3s ease;
+}
+
+/* 添加加载动画样式 */
+.message-content.loading {
+  position: relative;
+  min-width: 60px;
+}
+
+.message-content.loading::after {
+  content: "...";
+  position: absolute;
+  right: -12px;
+  bottom: 0;
+  animation: loading-dots 1.5s infinite;
+}
+
+@keyframes loading-dots {
+  0%, 20% { content: "."; }
+  40%, 60% { content: ".."; }
+  80%, 100% { content: "..."; }
+}
+
+/* 修改消息样式以支持加载状态 */
+.message {
+  margin-bottom: 20px;
+  max-width: 70%;
+  width: 100%;
+  animation: fade-in 0.3s ease-in-out;
+  display: flex;
+  flex-direction: column;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+
+.message.loading {
+  opacity: 0.7;
+}
+
+.message-content {
+  padding: 15px;
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  position: relative;
+  max-width: 80%;
+  transition: all 0.3s ease;
+}
+
+.no-history {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--mid-gray);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+}
+
+.no-history i.fa-comments {
+  font-size: 32px;
+  color: var(--light-color);
+}
+
+.no-history p {
+  font-size: 14px;
+  margin: 0;
+}
+
+.create-chat-btn {
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+}
+
+.create-chat-btn:hover {
+  background-color: var(--secondary-color);
+  transform: translateY(-1px);
+}
+
+.create-chat-btn i {
+  font-size: 12px;
+}
+
+/* 用户信息样式 */
+.user-profile {
+  padding: 15px 20px;
+  display: flex;
+  align-items: center;
+  border-top: 1px solid var(--light-color);
+  cursor: pointer;
+  position: relative;
+  background-color: white;
+  transition: all 0.2s;
+}
+
+.user-profile:hover {
+  background-color: rgba(67, 97, 238, 0.05);
+}
+
+.user-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: var(--primary-color);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  margin-right: 12px;
+  font-size: 16px;
+}
+
+.user-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.user-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--dark-color);
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-status {
+  font-size: 12px;
+  color: var(--mid-gray);
+}
+
+/* 用户信息卡片样式 */
+.user-card {
+  position: absolute;
+  bottom: 80px;
+  left: 20px;
+  width: 280px;
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+  z-index: 100;
+  animation: slide-up 0.3s ease-out;
+}
+
+@keyframes slide-up {
+  0% { transform: translateY(20px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+.user-card-header {
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--light-color);
+  position: relative;
+}
+
+.user-card-avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background-color: var(--primary-color);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  margin-right: 15px;
+  font-size: 24px;
+}
+
+.user-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.user-card-info h3 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--dark-color);
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-card-info p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--mid-gray);
+  line-height: 1.4;
+}
+
+.user-card-close {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--mid-gray);
+  font-size: 16px;
+  padding: 5px;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.user-card-close:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+  color: var(--dark-color);
+}
+
+.user-card-content {
+  padding: 20px;
+}
+
+.user-stats {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--light-color);
+}
+
+.stat-item {
+  text-align: center;
+  flex: 1;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: bold;
+  color: var(--primary-color);
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--mid-gray);
+}
+
+.user-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.user-menu-item {
+  padding: 12px 15px;
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  color: var(--dark-color);
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.user-menu-item:hover {
+  background-color: rgba(67, 97, 238, 0.05);
+}
+
+.user-menu-item i {
+  margin-right: 12px;
+  width: 20px;
+  text-align: center;
+  color: var(--primary-color);
+  font-size: 16px;
+}
+
+/* 确保在侧边栏折叠时正确显示用户信息 */
+.sidebar.collapsed .user-profile {
+  padding: 15px 0;
+  justify-content: center;
+}
+
+.sidebar.collapsed .user-avatar {
+  margin-right: 0;
+}
+
+.sidebar.collapsed .user-info {
+  display: none;
+}
+
+/* 确保在移动端正确显示用户信息 */
+@media (max-width: 768px) {
+  .user-card {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    margin: 0;
+    width: 90%;
+    max-width: 320px;
+  }
+}
+
+/* 欢迎页面样式 */
+.welcome-page {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 40px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  min-height: calc(100vh - 70px);
+}
+
+.welcome-content {
+  max-width: 1000px;
+  width: 100%;
+  padding: 40px;
+}
+
+.welcome-header {
+  text-align: center;
+  margin-bottom: 60px;
+}
+
+.logo-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 20px;
+  padding: 20px 40px;
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+  margin-bottom: 30px;
+}
+
+.logo-container i {
+  font-size: 48px;
+  color: var(--primary-color);
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.logo-text {
+  text-align: left;
+}
+
+.logo-text h1 {
+  font-size: 36px;
+  font-weight: 700;
+  margin: 0;
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.logo-text p {
+  font-size: 16px;
+  color: var(--mid-gray);
+  margin: 5px 0 0;
+}
+
+.welcome-description {
+  font-size: 18px;
+  color: var(--mid-gray);
+  max-width: 600px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 30px;
+  margin: 40px 0;
+}
+
+.feature-card {
+  background: white;
+  border-radius: 16px;
+  padding: 30px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  position: relative;
+  overflow: hidden;
+}
+
+.feature-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+}
+
+.feature-card:hover::before {
+  opacity: 1;
+}
+
+.feature-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 15px;
+  background: linear-gradient(135deg, rgba(67, 97, 238, 0.1), rgba(63, 55, 201, 0.1));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.feature-icon i {
+  font-size: 24px;
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.feature-content {
+  flex: 1;
+}
+
+.feature-content h3 {
+  font-size: 20px;
+  margin: 0 0 8px;
+  color: var(--dark-color);
+}
+
+.feature-content p {
+  font-size: 14px;
+  color: var(--mid-gray);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.feature-arrow {
+  color: var(--primary-color);
+  opacity: 0;
+  transform: translateX(-10px);
+  transition: all 0.3s ease;
+}
+
+.feature-card:hover .feature-arrow {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.action-section {
+  text-align: center;
+  margin-top: 40px;
+}
+
+.start-chat-btn {
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+  color: white;
+  border: none;
+  padding: 16px 40px;
+  border-radius: 30px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  transition: all 0.3s ease;
+  box-shadow: 0 10px 20px rgba(67, 97, 238, 0.3);
+}
+
+.start-chat-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 15px 30px rgba(67, 97, 238, 0.4);
+}
+
+.start-chat-btn i {
+  font-size: 14px;
+}
+
+.action-hint {
+  font-size: 14px;
+  color: var(--mid-gray);
+  margin-top: 15px;
+}
+
+/* 响应式调整 */
+@media (max-width: 1024px) {
+  .features-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  .welcome-page {
+    padding: 20px;
+  }
+
+  .welcome-content {
+    padding: 20px;
+  }
+
+  .logo-container {
+    padding: 15px 25px;
+  }
+
+  .logo-text h1 {
+    font-size: 28px;
+  }
+
+  .welcome-description {
+    font-size: 16px;
+    padding: 0 20px;
+  }
+
+  .feature-card {
+    padding: 20px;
+  }
+
+  .feature-icon {
+    width: 50px;
+    height: 50px;
+  }
+
+  .feature-content h3 {
+    font-size: 18px;
+  }
+}
+
+/* 删除对话框样式 */
+.delete-dialog {
+  background: white;
+  width: 400px;
+  max-width: 90%;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  animation: dialog-pop 0.3s ease-out;
+}
+
+.delete-dialog .dialog-content {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  color: var(--dark-color);
+}
+
+.delete-dialog .dialog-content::before {
+  content: "\f071";
+  font-family: "Font Awesome 5 Free";
+  font-weight: 900;
+  font-size: 24px;
+  color: #ff9800;
+}
+
+.delete-dialog .dialog-content p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--dark-color);
+}
+
+.delete-dialog .btn-confirm {
+  background-color: #dc3545;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.delete-dialog .btn-confirm:hover {
+  background-color: #c82333;
+}
+
+.delete-dialog .btn-confirm::before {
+  content: "\f2ed";
+  font-family: "Font Awesome 5 Free";
+  font-weight: 900;
+  font-size: 14px;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .delete-dialog {
+    width: 90%;
+    margin: 20px;
+  }
 }
 </style>
