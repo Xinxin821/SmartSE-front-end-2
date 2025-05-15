@@ -200,9 +200,8 @@
       <!-- 聊天内容区域 - 只在有会话时显示 -->
       <div v-else class="chat-container" id="chatContainer">
         <!-- 动态渲染消息 -->
-        <div
-        //冲突解决处1
-          v-for="(message, index) in messages"
+        <!--        //冲突解决处1-->
+        <div v-for="(message, index) in messages"
           :key="index"
           class="message"
           :class="[
@@ -424,13 +423,14 @@ export default {
         await this.loadChatHistories();
         this.setupDragHandlers();
         this.setupClickOutsideHandlers();
-        
+
         // 移除自动加载欢迎消息的逻辑
         this.scrollToBottom();
       } catch (error) {
         console.error('初始化失败:', error);
         this.showErrorMessage('加载数据失败，请刷新页面重试');
       }
+    },
       
     getInitial(name) {
       return name.charAt(0).toUpperCase();
@@ -1036,8 +1036,8 @@ export default {
         content: userMessageContent,*/
 
         time: this.getCurrentTime()
-      };
-      this.messages.push(userMessage);
+      });
+      this.messages.push(userMessage);//有疑问
 
       // 添加加载中的系统消息
       const loadingMessage = {
@@ -1589,7 +1589,7 @@ body {
   background-color: rgba(67, 97, 238, 0.1);
 }
 
-//冲突解决处10
+/*冲突解决处10*/
 .history-title {
   font-weight: 500;
   margin-bottom: 4px;
@@ -2185,7 +2185,7 @@ body {
 .message {
   transition: all 0.3s ease;
 }
-//冲突合并处12
+/*冲突合并处12*/
 
 /* 添加加载动画样式 */
 .message-content.loading {
@@ -2773,203 +2773,206 @@ body {
   .delete-dialog {
     width: 90%;
     margin: 20px;
-
-/* 模态框样式 */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  backdrop-filter: blur(5px);
-  animation: fade-in 0.3s ease-out;
-}
-
-.profile-modal {
-  background-color: white;
-  border-radius: 12px;
-  width: 90%;
-  max-width: 500px;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-  animation: slide-up 0.3s ease-out;
-}
-
-.modal-header {
-  padding: 20px;
-  border-bottom: 1px solid var(--light-color);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.modal-header h3 {
-  font-size: 18px;
-  color: var(--dark-color);
-  margin: 0;
-}
-
-.modal-close {
-  background: none;
-  border: none;
-  color: var(--mid-gray);
-  font-size: 18px;
-  cursor: pointer;
-  transition: color 0.2s;
-}
-
-.modal-close:hover {
-  color: var(--primary-color);
-}
-
-.modal-content {
-  padding: 20px;
-}
-
-.avatar-upload {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.avatar-preview {
-  width: 120px;
-  height: 120px;
-  border-radius: 50%;
-  background-color: var(--primary-color);
-  background-size: cover;
-  background-position: center;
-  position: relative;
-  margin-bottom: 10px;
-  border: 3px solid white;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-}
-
-.avatar-edit-btn {
-  position: absolute;
-  bottom: 5px;
-  right: 5px;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background-color: var(--primary-color);
-  color: white;
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.avatar-edit-btn:hover {
-  background-color: var(--secondary-color);
-  transform: scale(1.1);
-}
-
-.avatar-hint {
-  font-size: 12px;
-  color: var(--mid-gray);
-  margin: 0;
-}
-
-.form-group {
-  margin-bottom: 15px;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 8px;
-  font-size: 14px;
-  color: var(--dark-color);
-  font-weight: 500;
-}
-
-.form-group input,
-.form-group textarea {
-  width: 100%;
-  padding: 12px 15px;
-  border: 1px solid var(--light-color);
-  border-radius: 8px;
-  font-size: 14px;
-  transition: border-color 0.2s;
-}
-
-.form-group input:focus,
-.form-group textarea:focus {
-  outline: none;
-  border-color: var(--primary-color);
-}
-
-.form-group textarea {
-  min-height: 80px;
-  resize: vertical;
-}
-
-.form-row {
-  display: flex;
-  gap: 15px;
-}
-
-.form-row .form-group {
-  flex: 1;
-}
-
-.modal-footer {
-  padding: 15px 20px;
-  border-top: 1px solid var(--light-color);
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.btn-cancel,
-.btn-save {
-  padding: 10px 20px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-cancel {
-  background-color: var(--light-color);
-  color: var(--mid-gray);
-  border: none;
-}
-
-.btn-cancel:hover {
-  background-color: #e9ecef;
-}
-
-.btn-save {
-  background-color: var(--primary-color);
-  color: white;
-  border: none;
-}
-
-.btn-save:hover {
-  background-color: var(--secondary-color);
-}
-
-/* 响应式调整 */
-@media (max-width: 768px) {
-  .profile-modal {
-    width: 95%;
-  }
-
-  .form-row {
-    flex-direction: column;
-    gap: 15px;
-
   }
 }
-</style>
+
+    /* 模态框样式 */
+
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      backdrop-filter: blur(5px);
+      animation: fade-in 0.3s ease-out;
+    }
+
+    .profile-modal {
+      background-color: white;
+      border-radius: 12px;
+      width: 90%;
+      max-width: 500px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      animation: slide-up 0.3s ease-out;
+    }
+
+    .modal-header {
+      padding: 20px;
+      border-bottom: 1px solid var(--light-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-header h3 {
+      font-size: 18px;
+      color: var(--dark-color);
+      margin: 0;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      color: var(--mid-gray);
+      font-size: 18px;
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+
+    .modal-close:hover {
+      color: var(--primary-color);
+    }
+
+    .modal-content {
+      padding: 20px;
+    }
+
+    .avatar-upload {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .avatar-preview {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background-color: var(--primary-color);
+      background-size: cover;
+      background-position: center;
+      position: relative;
+      margin-bottom: 10px;
+      border: 3px solid white;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .avatar-edit-btn {
+      position: absolute;
+      bottom: 5px;
+      right: 5px;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background-color: var(--primary-color);
+      color: white;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .avatar-edit-btn:hover {
+      background-color: var(--secondary-color);
+      transform: scale(1.1);
+    }
+
+    .avatar-hint {
+      font-size: 12px;
+      color: var(--mid-gray);
+      margin: 0;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 14px;
+      color: var(--dark-color);
+      font-weight: 500;
+    }
+
+    .form-group input,
+    .form-group textarea {
+      width: 100%;
+      padding: 12px 15px;
+      border: 1px solid var(--light-color);
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+
+    .form-group input:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: var(--primary-color);
+    }
+
+    .form-group textarea {
+      min-height: 80px;
+      resize: vertical;
+    }
+
+    .form-row {
+      display: flex;
+      gap: 15px;
+    }
+
+    .form-row .form-group {
+      flex: 1;
+    }
+
+    .modal-footer {
+      padding: 15px 20px;
+      border-top: 1px solid var(--light-color);
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .btn-cancel,
+    .btn-save {
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-cancel {
+      background-color: var(--light-color);
+      color: var(--mid-gray);
+      border: none;
+    }
+
+    .btn-cancel:hover {
+      background-color: #e9ecef;
+    }
+
+    .btn-save {
+      background-color: var(--primary-color);
+      color: white;
+      border: none;
+    }
+
+    .btn-save:hover {
+      background-color: var(--secondary-color);
+    }
+
+    /* 响应式调整 */
+    @media (max-width: 768px) {
+      .profile-modal {
+        width: 95%;
+      }
+
+      .form-row {
+        flex-direction: column;
+        gap: 15px;
+
+      }
+    }
+  </style>
