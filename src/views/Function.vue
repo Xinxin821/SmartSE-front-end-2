@@ -1081,17 +1081,34 @@ export default {
         // 创建EventSource连接
         const sessionIdParam = currentSessionId ? `&sessionId=${currentSessionId}` : '';
         const eventSource = new EventSource(`http://localhost:8080/api/chat/stream_chat?message=${encodeURIComponent(userMessage)}&userId=${userId}&sessionId=${currentSessionId}`);
-
         // 处理流式数据
         eventSource.onmessage = (event) => {
           if (event.data === "[DONE]") {
-            eventSource.close();
+            // eventSource.close();
             this.isLoading = false;
             // 标记消息流结束
             const lastBotMessage = this.messages[this.messages.length - 1];
             if (lastBotMessage.type === 'bot') {
               lastBotMessage.isStreaming = false;
             }
+            return;
+          }
+
+          if (event.data.startsWith("[TITLE]")) {
+            const newTitle = event.data.substring(7);
+            console.log("Received title:", newTitle);
+            // 确保有活跃会话
+            if (this.activeHistoryIndex >= 0 && this.chatHistories[this.activeHistoryIndex]) {
+
+              if (this.currentTopic === this.chatHistories[this.activeHistoryIndex].title) {
+                this.currentTopic = newTitle;
+              }
+
+              this.chatHistories[this.activeHistoryIndex].title = newTitle;
+
+            }
+            eventSource.close();
+            this.isLoading = false;
             return;
           }
 
@@ -2416,6 +2433,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  height: auto;
+  width: auto;
 }
 
 .user-menu-item {
@@ -2426,6 +2445,7 @@ body {
   color: var(--dark-color);
   border-radius: 8px;
   transition: all 0.2s;
+  height: 38px;
 }
 
 .user-menu-item:hover {
@@ -2535,25 +2555,18 @@ body {
   line-height: 1.6;
 }
 
-.features-grid {
+.feature-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 30px;
-  margin: 40px 0;
 }
 
 .feature-card {
-  background: white;
-  border-radius: 16px;
+  background-color: var(--light);
+  border-radius: 10px;
   padding: 30px;
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-  position: relative;
-  overflow: hidden;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+  transition: transform 0.3s, box-shadow 0.3s;
 }
 
 .feature-card::before {

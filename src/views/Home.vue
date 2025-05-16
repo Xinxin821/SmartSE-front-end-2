@@ -35,52 +35,32 @@
           </div>
 
           <!-- 右侧交互面板 -->
-          <div class="hero-demo-panel">
-            <!-- 智能体交互演示 -->
-            <div class="demo-card">
-              <div class="demo-header">
-                <h3><i class="fas fa-robot"></i> 智能体系统演示</h3>
-                <div class="agent-selector">
-                  <button
-                      v-for="agent in demoAgents"
-                      :key="agent.id"
-                      @click="selectAgent(agent)"
-                      :class="{active: selectedAgent.id === agent.id}"
-                  >
-                    <i :class="'fas ' + agent.icon"></i>
-                    {{ agent.name }}
-                  </button>
-                </div>
-              </div>
-
-              <div class="demo-conversation">
-                <div v-for="(msg, index) in demoMessages" :key="index"
-                     :class="['demo-message', msg.sender === '您' ? 'user-message' : 'agent-message']">
-                  <div class="message-sender">{{ msg.sender }}：</div>
-                  <div class="message-content">{{ msg.content }}</div>
-                </div>
-              </div>
-
-              <div class="quick-questions">
-                <p class="quick-title">试试提问：</p>
-                <ul>
-                  <li v-for="(q, index) in quickQuestions" :key="index"
-                      @click="askQuestion(q)">
-                    {{ q }}
-                  </li>
-                </ul>
+          <div class="chat-demo">
+            <div class="chat-header">
+              <!--      <img src="/api/placeholder/40/40" alt="SmartSE">-->
+              <div>
+                <div style="font-weight: 500;">SmartSE 智能助手</div>
+                <div style="font-size: 12px;">实时在线</div>
               </div>
             </div>
-
-            <!-- 知识图谱徽章 -->
-            <div class="knowledge-badge">
-              <div class="badge-icon">
-                <i class="fas fa-project-diagram"></i>
+            <div class="chat-body">
+              <div v-for="(message, index) in messages" :key="index" :class="['message', `message-${message.type}`]">
+                <div class="message-content">
+                  {{ message.content }}
+                </div>
               </div>
-              <div class="badge-content">
-                <h4>专业知识库支持</h4>
-                <p>基于<span>1,200+</span>软件工程知识点构建</p>
-              </div>
+            </div>
+            <div class="chat-footer">
+              <input
+                  type="text"
+                  class="chat-input"
+                  placeholder="输入您的问题..."
+                  v-model="newMessage"
+                  @keypress.enter="sendMessage"
+              >
+              <button class="chat-send" @click="tip">
+                <i class="fas fa-paper-plane"></i>
+              </button>
             </div>
           </div>
         </div>
@@ -159,20 +139,17 @@ export default {
   name: 'HomeView',
   data() {
     return {
-      demoAgents: [
-        { id: 1, name: '需求分析', icon: 'fa-clipboard-list' },
-        { id: 2, name: '软件设计', icon: 'fa-sitemap' },
-        { id: 3, name: '代码评审', icon: 'fa-code' }
+      messages: [
+        { type: 'assistant', content: '你好呀！我是你的软件工程学习小助手，由SmartSE团队专门研发，用来帮助解决你在软件工程课程中遇到的各种问题~\n' +
+              '\n' +
+              '无论是概念理解、需求分析、设计模式，还是代码调试、测试用例编写，或者作业中的困惑，都可以随时问我哦！\n' +
+              '\n' +
+              '比如你可以试着问我： "怎么理解面向对象三大特性？" ,"能帮我分析这个用例图的问题吗？" ,"这个单元测试用例怎么写比较好？"\n' +
+              '\n' +
+              '你最近在学软件工程的哪个部分呢？😊' },
       ],
-      selectedAgent: { id: 1, name: '需求分析', icon: 'fa-clipboard-list' },
-      demoMessages: [
-        { sender: '系统', content: '请选择智能体类型开始体验' }
-      ],
-      quickQuestions: [
-        '如何编写用户故事？',
-        '什么是MVC模式？',
-        '黑盒测试有哪些方法？'
-      ],
+      newMessage: '',
+      responseTimeout: null,
       features: [
         {
           icon: 'fas fa-comments',
@@ -254,39 +231,24 @@ export default {
     }
   },
   methods: {
-    selectAgent(agent) {
-      this.selectedAgent = agent;
-      this.demoMessages = [
-        { sender: '系统', content: `已切换到${agent.name}智能体` },
-        { sender: agent.name, content: this.getAgentDemoResponse(agent.id) }
-      ];
-    },
-    askQuestion(question) {
-      this.demoMessages.push(
-          { sender: '您', content: question },
-          { sender: this.selectedAgent.name, content: this.getAnswer(question) }
-      );
-      // 自动滚动到底部
-      this.$nextTick(() => {
-        const container = this.$el.querySelector('.demo-conversation');
-        container.scrollTop = container.scrollHeight;
+    // 添加tip方法
+    tip() {
+      // 使用ElementUI的Message组件
+      this.$message({
+        message: '请先登录后使用智能助手功能',
+        type: 'warning'
       });
+      // 延迟一下再跳转，让用户有时间看到提示
+      setTimeout(() => {
+        this.$router.push('/login');
+      }, 1500);
     },
-    getAgentDemoResponse(agentId) {
-      const responses = {
-        1: '我是需求分析智能体，可以帮助您编写用户要求、需求规格说明书，以及分析需求合理性。',
-        2: '我是软件设计智能体，擅长系统架构设计、设计模式应用和UML图绘制指导。',
-        3: '我是代码评审智能体，可以分析代码质量、识别代码错误，并提出改进建议。'
-      };
-      return responses[agentId] || '您好，请问有什么可以帮助您的？';
-    },
-    getAnswer(question) {
-      const answers = {
-        '如何编写用户要求？': '用户故事通常遵循"作为[角色]，我想要[功能]，以便[价值]"的格式。重点描述用户角色、具体需求和业务价值。',
-        '什么是MVC模式？': 'MVC是Model-View-Controller的缩写，是一种将应用分为数据模型、用户界面和控制逻辑的设计模式，实现关注点分离。',
-        '黑盒测试有哪些方法？': '常见黑盒测试方法包括：等价类划分、边界值分析、决策表测试、状态转换测试和用例测试等。'
-      };
-      return answers[question] || '这个问题很有趣，我们的智能体可以为您提供详细解答。请注册后体验完整功能。';
+    scrollToBottom() {
+      this.$nextTick(() => {
+        if (this.$refs.chatBody) {
+          this.$refs.chatBody.scrollTop = this.$refs.chatBody.scrollHeight;
+        }
+      });
     }
   },
   mounted() {
@@ -372,6 +334,7 @@ header {
   justify-content: space-between;
   align-items: center;
   padding: 15px 0;
+  height: 80px;
 }
 
 .logo {
@@ -454,199 +417,6 @@ nav ul li a:hover {
   50% { border-color: var(--primary) }
 }
 
-/* 右侧交互面板样式 */
-.hero-demo-panel {
-  flex: 0 0 380px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.demo-card {
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
-  transition: transform 0.3s, box-shadow 0.3s;
-}
-
-.demo-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.15);
-}
-
-.demo-header {
-  padding: 20px;
-  background: linear-gradient(135deg, var(--primary), var(--primary-light));
-  color: white;
-}
-
-.demo-header h3 {
-  margin: 0 0 15px 0;
-  font-size: 18px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.demo-header i {
-  font-size: 20px;
-}
-
-.agent-selector {
-  display: flex;
-  gap: 8px;
-}
-
-.agent-selector button {
-  flex: 1;
-  padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.2);
-  border: none;
-  border-radius: 6px;
-  color: white;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.3s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-
-.agent-selector button:hover {
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.agent-selector button.active {
-  background: white;
-  color: var(--primary);
-}
-
-.demo-conversation {
-  height: 250px;
-  padding: 15px;
-  overflow-y: auto;
-  background: var(--grey-light);
-}
-
-.demo-message {
-  margin-bottom: 15px;
-  line-height: 1.5;
-}
-
-.message-sender {
-  font-weight: 600;
-  margin-bottom: 4px;
-  font-size: 14px;
-}
-
-.user-message .message-sender {
-  color: var(--primary);
-}
-
-.agent-message .message-sender {
-  color: #666;
-}
-
-.message-content {
-  background: white;
-  padding: 10px 15px;
-  border-radius: 8px;
-  display: inline-block;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-}
-
-.user-message .message-content {
-  background: var(--primary);
-  color: white;
-  border-top-right-radius: 0;
-}
-
-.agent-message .message-content {
-  border-top-left-radius: 0;
-}
-
-.quick-questions {
-  padding: 15px;
-  border-top: 1px solid var(--grey);
-}
-
-.quick-title {
-  font-size: 14px;
-  color: #666;
-  margin-bottom: 10px;
-}
-
-.quick-questions ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.quick-questions li {
-  background: rgba(66, 78, 221, 0.1);
-  color: var(--primary);
-  padding: 6px 12px;
-  border-radius: 15px;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.quick-questions li:hover {
-  background: rgba(66, 78, 221, 0.2);
-  transform: translateY(-2px);
-}
-
-/* 知识图谱徽章 */
-.knowledge-badge {
-  display: flex;
-  align-items: center;
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 5px 20px rgba(0,0,0,0.08);
-  transition: transform 0.3s;
-}
-
-.knowledge-badge:hover {
-  transform: translateY(-5px);
-}
-
-.badge-icon {
-  width: 50px;
-  height: 50px;
-  background: linear-gradient(135deg, var(--primary), var(--primary-light));
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: 24px;
-  margin-right: 15px;
-  flex-shrink: 0;
-}
-
-.badge-content h4 {
-  margin: 0 0 5px 0;
-  color: var(--dark);
-}
-
-.badge-content p {
-  margin: 0;
-  color: #666;
-  font-size: 14px;
-}
-
-.badge-content span {
-  color: var(--primary);
-  font-weight: 600;
-  margin: 0 3px;
-}
 
 /* 功能区域样式 */
 .features {
@@ -968,5 +738,119 @@ footer {
   .agent-selector {
     flex-direction: column;
   }
+}
+
+.chat-demo {
+  width: 100%;
+  max-width: 500px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+  overflow: hidden;
+  margin-top: 30px;
+  margin-left: auto;
+  position: relative;
+  z-index: 2;
+  animation: float 6s ease-in-out infinite;
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-15px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+.chat-header {
+  background-color: var(--primary);
+  color: white;
+  padding: 15px;
+  display: flex;
+  align-items: center;
+}
+
+.chat-header img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  margin-right: 15px;
+}
+
+.chat-body {
+  padding: 15px;
+  height: 350px;
+  overflow-y: auto;
+}
+
+.message {
+  margin-bottom: 15px;
+  display: flex;
+  width: 100%;
+}
+
+.message-user {
+  align-items: flex-end;
+}
+
+.message-assistant {
+  align-items: flex-start;
+}
+
+.message-content {
+  padding: 10px 15px;
+  border-radius: 18px;
+  max-width: 100%;
+  animation: fadeIn 0.5s;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.message-user .message-content {
+  background-color: var(--primary);
+  color: white;
+  border-top-right-radius: 4px;
+}
+
+.message-assistant .message-content {
+  background-color: var(--grey);
+  color: var(--dark);
+  border-top-left-radius: 4px;
+}
+
+.chat-footer {
+  padding: 15px;
+  border-top: 1px solid var(--grey);
+  display: flex;
+}
+
+.chat-input {
+  flex: 1;
+  padding: 10px 15px;
+  border: 1px solid var(--grey);
+  border-radius: 25px;
+  outline: none;
+  font-family: inherit;
+}
+
+.chat-send {
+  margin-left: 10px;
+  background-color: var(--primary);
+  color: white;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
 }
 </style>
