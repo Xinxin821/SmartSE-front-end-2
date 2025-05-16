@@ -207,19 +207,30 @@
           :class="[
             message.type === 'user' ? 'user-message' :
             message.type === 'system' ? 'system-message' : 'bot-message',
-            { 'is-new': message.isNew },
-            { 'loading': message.isLoading }
-          ]"
-        >
-          <div 
-            class="message-content"
-            :class="{ 'loading': message.isLoading }"
-          >
-          
-            {{ message.content }}
+            // { 'is-new': message.isNew}
+            { 'is-new': message.isNew, 'streaming': message.isStreaming }
+          ]">
+<!--          <div-->
+<!--            class="message-content"-->
+<!--            :class="{ 'loading': message.isLoading }"-->
+<!--            v-if="message.content !=null"-->
+<!--          >-->
+<!--            {{ message.content }}-->
+<!--          </div>-->
+          <div class="message-content">
+            <!-- 使用v-html渲染Markdown，注意安全 -->
+            <div v-if="message.renderedContent" v-html="message.renderedContent"></div>
+            <div v-else-if="message.content">{{ message.content }}</div>
+            <!-- 流式加载指示器 -->
+            <div v-if="message.isStreaming" class="streaming-indicator">
+              <div class="dot"></div>
+              <div class="dot"></div>
+              <div class="dot"></div>
+            </div>
           </div>
-          <div class="message-info">
-            <span>{{ message.type === 'user' ? '您' : message.type === 'system' ? '系统' : '助手' }} · {{ message.time }}</span>
+
+          <div class="message-info" v-if="message.content !=null">
+            <span>{{ message.type === 'user' ? '您' : message.type === 'system' ? '系统' : '' }} {{ message.time }}</span>
             <span v-if="message.agent" class="agent-tag">{{ message.agent }}</span>
           </div>
         </div>
@@ -356,6 +367,8 @@
 <script>
 import axios from 'axios';
 import { ElMessage } from 'element-plus';
+import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 
 export default {
   name: 'FunctionPage',
@@ -964,17 +977,6 @@ export default {
           sessionTitle: `新会话 ${this.getCurrentTime()}`
         });
 
-        /*生成新的会话ID (实际应从API获取)
-        const newSessionId = Date.now(); // 临时方案，实际应从API获取
-        const newHistoryTitle = `新会话 ${this.getCurrentTime()}`;
-        this.chatHistories.unshift(newHistoryTitle);
-        this.chatHistories.unshift({
-          title: newHistoryTitle,
-          sessionId: newSessionId
-        });
-        this.activeHistoryIndex = 0;*/
-
-
         if (response.data.code === 200) {
           const sessionId = response.data.data.sessionId;
           localStorage.setItem('currentSessionId', sessionId);
@@ -1023,39 +1025,28 @@ export default {
       this.messages.push({
         type: 'user',
         content: userMessage,
-
-      /* 保存用户消息内容
-      const userMessageContent = this.inputMessage;
-
-      // 清空输入框
-      this.inputMessage = '';
-
-      // 添加用户消息
-      const userMessage = {
-        type: 'user',
-        content: userMessageContent,*/
-
         time: this.getCurrentTime()
       });
-      this.messages.push(userMessage);//有疑问
 
       // 添加加载中的系统消息
-      const loadingMessage = {
-        type: 'system',
-        content: '正在思考中...',
-        time: this.getCurrentTime()
-      };
-      this.messages.push(loadingMessage);
-      this.scrollToBottom();
-
-      // 添加一个临时的"正在输入"消息
-      this.messages.push({
+      // const loadingMessage = {
+      //   type: 'system',
+      //   content: '正在思考中...',
+      //   agent: '智能助手',
+      //   time: this.getCurrentTime(),
+      //   isLoading: true
+      // };
+      // this.messages.push(loadingMessage);
+      // this.scrollToBottom();
+      // 添加临时的bot消息占位符
+      const botMessage = {
         type: 'bot',
-        content: '正在思考...',
+        content: '',
         time: this.getCurrentTime(),
         agent: '智能助手',
-        isLoading: true
-      });
+        isStreaming: true
+      };
+      this.messages.push(botMessage);
 
       this.inputMessage = ''; // 清空输入框
       this.scrollToBottom();
@@ -1065,28 +1056,68 @@ export default {
         const userId = localStorage.getItem("userId");
 //冲突解决处9
         
-        let url = `http://localhost:8080/api/chat/stream_chat?message=${encodeURIComponent(userMessage)}&userId=${userId}`;
-        
-        if (currentSessionId) {
-          url += `&sessionId=${currentSessionId}`;
-        }
+        // let url = `http://localhost:8080/api/chat/stream_chat?message=${encodeURIComponent(userMessage)}&userId=${userId}`;
+        //
+        // if (currentSessionId) {
+        //   url += `&sessionId=${currentSessionId}`;
+        // }
+        //
+        // console.log('Final request URL:', url);
+        //
+        // const response = await axios.get(url, {
+        //   responseType: 'text'
+        // });
+        //
+        // // 移除临时的"正在输入"消息
+        // this.messages = this.messages.filter(msg => !msg.isLoading);
+        //
+        // // 添加实际的回复消息
+        // this.messages.push({
+        //   type: 'bot',
+        //   content: response.data,
+        //   time: this.getCurrentTime(),
+        //   agent: '智能助手'
+        // });
+        // 创建EventSource连接
+        const sessionIdParam = currentSessionId ? `&sessionId=${currentSessionId}` : '';
+        const eventSource = new EventSource(`http://localhost:8080/api/chat/stream_chat?message=${encodeURIComponent(userMessage)}&userId=${userId}&sessionId=${currentSessionId}`);
 
-        console.log('Final request URL:', url);
-        
-        const response = await axios.get(url, {
-          responseType: 'text'
-        });
+        // 处理流式数据
+        eventSource.onmessage = (event) => {
+          if (event.data === "[DONE]") {
+            eventSource.close();
+            this.isLoading = false;
+            // 标记消息流结束
+            const lastBotMessage = this.messages[this.messages.length - 1];
+            if (lastBotMessage.type === 'bot') {
+              lastBotMessage.isStreaming = false;
+            }
+            return;
+          }
 
-        // 移除临时的"正在输入"消息
-        this.messages = this.messages.filter(msg => !msg.isLoading);
+          // 更新最后一条bot消息内容
+          const lastBotMessage = this.messages[this.messages.length - 1];
+          if (lastBotMessage.type === 'bot') {
+            lastBotMessage.content += event.data;
+            // 使用Marked.js渲染Markdown
+            // 在接收消息时，使用DOMPurify清理HTML
+            lastBotMessage.renderedContent = DOMPurify.sanitize(marked.parse(lastBotMessage.content));
+            this.$forceUpdate();
+            this.scrollToBottom();
+          }
+        };
 
-        // 添加实际的回复消息
-        this.messages.push({
-          type: 'bot',
-          content: response.data,
-          time: this.getCurrentTime(),
-          agent: '智能助手'
-        });
+        eventSource.onerror = (error) => {
+          console.error("EventSource failed:", error);
+          eventSource.close();
+          this.isLoading = false;
+          // 标记消息流结束
+          const lastBotMessage = this.messages[this.messages.length - 1];
+          if (lastBotMessage.type === 'bot') {
+            lastBotMessage.isStreaming = false;
+          }
+          this.showErrorMessage("连接中断，请重试");
+        };
       } catch (error) {
         console.error("发送消息失败:", error);
         this.showErrorMessage("发送失败: " + (error.response?.data || error.message));
@@ -1094,51 +1125,6 @@ export default {
         this.messages = this.messages.filter(msg => !msg.isLoading);
       } finally {
         this.isLoading = false;
-
-        /*const sessionId = this.activeHistoryIndex >= 0
-            ? this.chatHistories[this.activeHistoryIndex].sessionId
-            : null;
-
-        // 修改为GET请求，参数通过URL传递
-        const response = await axios.get('http://localhost:8080/api/chat/stream_chat', {
-          params: {  // 使用params将参数转为查询字符串
-            message: userMessageContent,
-            userId: userId,
-            sessionId: sessionId
-          },
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('userToken')}`
-          }
-        });
-
-        // 移除加载消息
-        this.messages = this.messages.filter(msg => msg.content !== '正在思考中...');
-
-        if (response.data?.code === 200 && response.data?.data?.answer) {
-          // 添加AI回复
-          this.messages.push({
-            type: 'bot',
-            content: response.data.data.answer,
-            time: this.getCurrentTime(),
-            agent: '通用助手'
-          });
-        } else {
-          console.error("接口返回数据异常:", response.data);
-          this.$message.error("获取回答失败: " + (response.data?.message || '未知错误'));
-        }
-      } catch (error) {
-        console.error("完整的错误详情:", error.response?.data);
-        alert("提问失败: " + (error.response?.data?.message || error.message));
-
-        // 移除加载消息并显示错误消息
-        this.messages = this.messages.filter(msg => msg.content !== '正在思考中...');
-        this.messages.push({
-          type: 'system',
-          content: '请求失败: ' + (error.response?.data?.message || error.message),
-          time: this.getCurrentTime()
-        });
-      } finally {*/
-
         this.scrollToBottom();
       }
     },
@@ -2975,4 +2961,87 @@ body {
 
       }
     }
+/* Markdown渲染样式 */
+.message-content >>> pre {
+  background-color: #f6f8fa;
+  padding: 16px;
+  border-radius: 6px;
+  overflow: auto;
+}
+
+.message-content >>> code {
+  background-color: rgba(175, 184, 193, 0.2);
+  padding: 0.2em 0.4em;
+  border-radius: 6px;
+  font-family: monospace;
+}
+
+.message-content >>> blockquote {
+  border-left: 4px solid #dfe2e5;
+  padding-left: 16px;
+  margin-left: 0;
+  color: #6a737d;
+}
+
+/* 流式指示器样式 */
+.streaming-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  background-color: var(--primary-color);
+  border-radius: 50%;
+  opacity: 0.6;
+  animation: pulse 1.5s infinite ease-in-out;
+}
+
+.dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+}
+
+/* 流式消息样式 */
+.message.streaming .message-content {
+  position: relative;
+}
+
+.message.streaming .message-content::after {
+  content: "";
+  position: absolute;
+  bottom: -10px;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--primary-color), transparent);
+  animation: streaming 1.5s infinite;
+}
+
+@keyframes streaming {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
   </style>
