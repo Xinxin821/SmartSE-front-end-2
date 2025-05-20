@@ -9,6 +9,13 @@
     --success: #52b788;
     --warning: #ffb703;
     --danger: #e63946;
+    --light-color: #f8f9fa;  /* 浅色 */
+    --dark-color: #212529;   /* 深色 */
+    --mid-gray: #6c757d;     /* 中灰色 */
+    --primary-color: #4361ee; /* 主色 */
+    --secondary-color: #3f37c9; /* 次色 */
+    --shadow: 0 2px 10px rgba(0, 0, 0, 0.1); /* 阴影效果 */
+    --accent-color: #3a86ff; /* 强调色 */
 }
 
 * {

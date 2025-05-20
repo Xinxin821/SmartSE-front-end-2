@@ -1,10 +1,8 @@
 import { fileURLToPath, URL } from 'node:url'
-
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 
-// https://vite.dev/config/
 export default defineConfig({
   plugins: [
     vue(),
@@ -15,13 +13,22 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     },
   },
+  optimizeDeps: {
+    include: [
+      'markdown-it',
+      'markdown-it-emoji',
+      'markdown-it-task-lists',
+      'highlight.js'
+    ],
+    exclude: ['vue-demi']
+  },
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',  // 后端地址
+        target: 'http://localhost:8080',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),  // 可选：去掉 /api 前缀
+        rewrite: (path) => path.replace(/^\/api/, ''),
       },
     },
-  },
+  }
 })
