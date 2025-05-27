@@ -146,15 +146,14 @@ export default {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  margin-left: 280px; /* 与侧边栏宽度一致 */
-  width: calc(100% - 280px); /* 计算剩余宽度 */
   height: 100vh;
+  margin: 0 auto;
   position: relative;
-  transition: margin-left 0.3s ease;
+  transition: padding-left 0.3s ease;
 }
 /* 侧边栏收起时的样式 */
 .sidebar-collapsed .chat-content-container {
-  margin-left: 70px;
+  padding-left: 70px;
   width: calc(100% - 70px);
 }
 
@@ -271,7 +270,9 @@ export default {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding-top: 0; /* 移除原有的顶部内边距 */
+  width:100%;
+  scrollbar-gutter: stable; /* 防止内容抖动 */
+  padding-right: 15px; /* 给滚动条留空间 */
 }
 
 .message {
@@ -507,16 +508,24 @@ export default {
 
 /* 响应式调整 */
 @media (max-width: 1024px) {
+  .chat-content-container {
+    max-width: 90%; /* 在小屏幕上缩小最大宽度 */
+  }
   .message {
     max-width: 90%;
   }
 }
 
 @media (max-width: 768px) {
+  .chat-content-container {
+    padding-left: 0;
+    max-width: 100%;
+  }
   .chat-container {
     flex: 1;
     padding: 20px;
-    overflow-y: auto;
+    overflow-y: scroll;
+    scrollbar-width: thin; /* 细滚动条 */
     margin-bottom: 180px; /* 初始为输入框留出空间 */
     display: flex;
     flex-direction: column;
