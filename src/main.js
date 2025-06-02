@@ -9,6 +9,9 @@ import '@fortawesome/fontawesome-free/css/all.min.css';
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
+import 'highlight.js/styles/github.css';
+import { loadScript } from './utils/loadScript';
+
 
 
 const app = createApp(App)

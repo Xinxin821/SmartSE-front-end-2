@@ -30,7 +30,7 @@
     <div class="main-content">
       <!-- 透明顶部边框 -->
       <div class="header">
-        <div class="current-topic">{{ currentTopic }}</div>
+        <div class="current-topic" style="font-weight: bold; color: #000;">{{ currentTopic }}</div>
         <div class="header-tools">
           <button class="create-chat-btn" @click="newChat">
             <i class="fas fa-plus"></i>
@@ -40,46 +40,46 @@
       </div>
       <!-- 动态内容区 -->
       <div class="content-area">
-      <!-- 知识图谱内容 -->
-      <KnowledgeGraph
-          v-if="activeMenu === 'knowledge'"
-          ref="knowledgeGraph"
-      />
-      <!-- 习题解析内容 -->
-      <ExerciseContainer
-          v-if="activeMenu === 'exercise'"
-          ref="exerciseContainer"
-      />
-      <!-- 聊天容器组件 -->
-      <ChatContainer
-          v-if="activeMenu === 'chat'"
-          :chat-histories="chatHistories"
-          :messages="messages"
-          :input-message="inputMessage"
-          @send-message="sendMessage"
-          @upload-file="uploadFile"
-          @upload-image="uploadImage"
-          @upload-code="uploadCode"
-          @start-recording="startRecording"
-          @update-input="updateInputMessage"
-      />
-    </div>
+        <!-- 知识图谱内容 -->
+        <KnowledgeGraph
+            v-if="activeMenu === 'knowledge'"
+            ref="knowledgeGraph"
+        />
+        <!-- 习题解析内容 -->
+        <ExerciseContainer
+            v-if="activeMenu === 'exercise'"
+            ref="exerciseContainer"
+        />
+        <!-- 聊天容器组件 -->
+        <ChatContainer
+            v-if="activeMenu === 'chat'"
+            :chat-histories="chatHistories"
+            :messages="messages"
+            :input-message="inputMessage"
+            @send-message="sendMessage"
+            @upload-file="uploadFile"
+            @upload-image="uploadImage"
+            @upload-code="uploadCode"
+            @start-recording="startRecording"
+            @update-input="updateInputMessage"
+        />
+      </div>
 
-    <!-- 重命名对话框 -->
-    <RenameDialog
-        v-if="showRenameDialog"
-        :current-title="newSessionTitle"
-        @confirm="confirmRename"
-        @cancel="cancelRename"
-        @update-title="updateSessionTitle"
-    />
+      <!-- 重命名对话框 -->
+      <RenameDialog
+          v-if="showRenameDialog"
+          :current-title="newSessionTitle"
+          @confirm="confirmRename"
+          @cancel="cancelRename"
+          @update-title="updateSessionTitle"
+      />
 
-    <!-- 删除对话框 -->
-    <DeleteDialog
-        v-if="showDeleteDialog"
-        @confirm="confirmDelete"
-        @cancel="cancelDelete"
-    />
+      <!-- 删除对话框 -->
+      <DeleteDialog
+          v-if="showDeleteDialog"
+          @confirm="confirmDelete"
+          @cancel="cancelDelete"
+      />
     </div>
     <!-- 全局进度条 (固定在右侧) -->
     <div class="global-progress">
@@ -228,6 +228,7 @@ export default {
       marked.setOptions({
         gfm: true,
         breaks: true,
+        tables: true, // 启用表格支持
         highlight: (code, lang) => {
           const validLang = hljs.getLanguage(lang) ? lang : 'plaintext';
           return hljs.highlight(validLang, code).value;
@@ -722,6 +723,8 @@ export default {
 
         this.activeHistoryIndex = index;
         this.currentTopic = selectedHistory.title || '新会话';
+      // 无论当前在哪个界面，都切换到聊天界面
+        this.activeMenu = 'chat';
 
         // 显示加载中的提示
         this.messages = [{
