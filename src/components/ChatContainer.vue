@@ -40,35 +40,62 @@
           message.type === 'system' ? 'system-message' : 'bot-message',
           { 'is-new': message.isNew, 'streaming': message.isStreaming }
         ]">
-        <div class="message-content">
-          <!-- 思考内容渲染 -->
-          <div v-if="message.type === 'bot' && message.content" class="thinking-content">
-            <div v-if="hasReasoningContent(message.content)" class="reasoning-section">
-              <div class="reasoning-header">思考过程</div>
-              <div class="reasoning-body" v-html="getReasoningContent(message.content)"></div>
-            </div>
-            <div class="answer-section" v-html="getAnswerContent(message.content)"></div>
-          </div>
-          <!-- 使用 v-html 渲染 Markdown，注意安全 -->
-          <div v-else-if="message.renderedContent" v-html="message.renderedContent"></div>
-          <!-- 纯文本回退 -->
-          <div v-else>{{ message.content }}</div>
-          <!-- 流式加载指示器 -->
-          <div v-if="message.isStreaming" class="streaming-indicator">
-            <div class="dot"></div>
-            <div class="dot"></div>
-            <div class="dot"></div>
+        <div class="avatar-container" v-if="message.type === 'bot'">
+          <div class="avatar-circle">
+            <img src="../assets/img/bot-avatar.png" alt="头像" />
           </div>
         </div>
+        <div class="message-content-wrapper">
+          <div class="message-content">
+            //冲突解决1
+            <!-- 思考内容渲染 -->
+            <div v-if="message.type === 'bot' && message.content" class="thinking-content">
+              <div v-if="hasReasoningContent(message.content)" class="reasoning-section">
+                <div class="reasoning-header">思考过程</div>
+                <div class="reasoning-body" v-html="getReasoningContent(message.content)"></div>
+              </div>
+              <div class="answer-section" v-html="getAnswerContent(message.content)"></div>
+            </div>
+            <!-- 使用 v-html 渲染 Markdown，注意安全 -->
+            <div v-else-if="message.renderedContent" v-html="message.renderedContent"></div>
+            <!-- 纯文本回退 -->
+            <div v-else>{{ message.content }}</div>
+            <!-- 使用动态组件渲染Markdown -->
+            <div v-if="message.type === 'bot' && message.isStreaming" class="streaming-content" ref="streamingContent">
+              <!-- 流式响应时直接显示原始内容 -->
+              <!-- 修改流式内容显示，添加基本Markdown支持 -->
+              <div class="markdown-body" v-html="sanitizeHtml(processStreamingContent(message.content))"></div>
+              <!-- 流式加载指示器 -->
+              <div class="streaming-indicator">
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+              </div>
+            </div>
+            <div v-else>
+              <template v-for="(block, bIdx) in renderMarkdownBlocks(message.content)" :key="bIdx">
+                <!-- 普通 Markdown 内容 -->
+                <div v-if="block.type === 'html'" class="markdown-body" v-html="block.content"/>
 
-        <div class="message-info" v-if="message.content != null">
-          <span>{{ message.type === 'user' ? '您' : message.type === 'system' ? '系统' : '' }} {{ message.time }}</span>
-          <span v-if="message.agent" class="agent-tag">{{ message.agent }}</span>
+                <!-- 代码块 -->
+                <EnhancedCodeBlock
+                    v-else-if="block.type === 'code'"
+                    :code="block.code"
+                    :language="block.language"
+                />
+              </template>
+            </div>
+          </div>
+          <div class="message-info" v-if="message.content != null">
+            <span>{{ message.type === 'user' ? '您' : message.type === 'system' ? '系统' : '' }} {{ message.time }}</span>
+            <span v-if="message.agent" class="agent-tag">{{ message.agent }}</span>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- 输入框部分 - 只在有会话时显示 -->
+    //冲突解决2
     <div v-if="chatHistories.length > 0" class="input-fixed-container" id="inputContainer" ref="inputContainer">
       <!-- 文件预览区域 -->
       <div v-if="previewFiles.length > 0" class="preview-container">
@@ -88,87 +115,121 @@
         </div>
       </div>
 
-      <div class="input-tools">
-        <input
-          type="file"
-          ref="fileInput"
-          style="display: none"
-          @change="handleFileUpload"
-          multiple
-          accept=".txt,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.rar,.jpg,.jpeg,.png,.gif"
-        />
-        <input
-          type="file"
-          ref="imageInput"
-          style="display: none"
-          @change="handleImageUpload"
-          accept="image/*"
-          multiple
-        />
-        <button class="input-tool" title="上传文件" @click="$refs.fileInput.click()">
-          <i class="fas fa-paperclip"></i>
+      <div v-if="chatHistories.length > 0" class="input-fixed-container" id="inputContainer" @mousedown="handleDragStart" ref="inputContainer" >
+        <div class="input-tools">
+          <input
+              type="file"
+              ref="fileInput"
+              style="display: none"
+              @change="handleFileUpload"
+              multiple
+              accept=".txt,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.rar,.jpg,.jpeg,.png,.gif"
+          />
+          <input
+              type="file"
+              ref="imageInput"
+              style="display: none"
+              @change="handleImageUpload"
+              accept="image/*"
+              multiple
+          />
+          <button class="input-tool" title="上传文件" @click="$refs.fileInput.click()">
+            <i class="fas fa-paperclip"></i>
+          </button>
+          <button class="input-tool" title="上传图片" @click="$refs.imageInput.click()">
+            <i class="fas fa-image"></i>
+          </button>
+          <button class="input-tool" title="上传代码" @click="handleCodeUpload">
+            <i class="fas fa-code"></i>
+          </button>
+          <button class="input-tool" title="录音" @click="handleRecording" :class="{ 'recording': isRecording }">
+            <i class="fas fa-microphone"></i>
+          </button>
+        </div>
+
+        <textarea
+            placeholder="请输入您的问题或指令..."
+            :value="inputMessage"
+            @input="$emit('update-input', $event.target.value)"
+            @keyup.enter="handleSendMessage"
+            :disabled="isRecording"
+        ></textarea>
+
+        <button
+            v-if="!isStreaming && !isWaitingForResponse"
+            class="input-submit"
+            @click="handleSendMessage"
+            :disabled="isRecording"
+        >
+          发送
         </button>
-        <button class="input-tool" title="上传图片" @click="$refs.imageInput.click()">
-          <i class="fas fa-image"></i>
-        </button>
-        <button class="input-tool" title="上传代码" @click="handleCodeUpload">
-          <i class="fas fa-code"></i>
-        </button>
-        <button class="input-tool" title="录音" @click="handleRecording" :class="{ 'recording': isRecording }">
-          <i class="fas fa-microphone"></i>
+        <button
+            v-else
+            class="input-submit"
+            @click="handleWaitingResponse"
+        >
+          回复中...
         </button>
       </div>
-
-      <textarea
-          placeholder="请输入您的问题或指令..."
-          :value="inputMessage"
-          @input="$emit('update-input', $event.target.value)"
-          @keyup.enter="handleSendMessage"
-          :disabled="isRecording"
-      ></textarea>
-
-      <button
-          v-if="!isStreaming && !isWaitingForResponse"
-          class="input-submit"
-          @click="handleSendMessage"
-          :disabled="isRecording"
-      >
-        发送
-      </button>
-      <button
-          v-else
-          class="input-submit"
-          @click="handleWaitingResponse"
-      >
-        回复中...
-      </button>
     </div>
   </div>
 </template>
 
+
 <script>
+//冲突解决3
 import { ElMessage } from 'element-plus';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-
+import { marked } from 'marked';
+import DOMPurify from 'dompurify';
+import hljs from 'highlight.js';
+import 'highlight.js/styles/github.css';
+import EnhancedCodeBlock from './markdown/EnhancedCodeBlock.vue';
+import MarkdownIt from 'markdown-it'
+import container from 'markdown-it-container'
+import taskLists from 'markdown-it-task-lists'
+import mathjax3 from 'markdown-it-mathjax3'
+import botAvatar from '../assets/img/bot-avatar.png'
+const md = new MarkdownIt({
+  html: true,
+  linkify: true,
+  typographer: true,
+  breaks: true,
+  xhtmlOut: false,  // 改为 false 以避免干扰公式
+  quotes: '""\'\''  // 修改引号配置
+}).use(mathjax3, {
+  tex: {
+    inlineMath: [['$', '$'], ['\\(', '\\)']],
+    displayMath: [['$$', '$$'], ['\\[', '\\]']],
+    processEscapes: true
+  },
+  options: {
+    skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+  }
+})
+    .use(container, 'info')
+    .use(taskLists, { enabled: true });
+marked.setOptions({
+  gfm: true,
+  breaks: true,
+  tables: true,//启用表格支持
+  mangle: false,    // 不转义特殊字符
+  headerIds: false,  // 禁用自动生成的标题ID
+  highlight: (code, lang) => {
+    const validLang = hljs.getLanguage(lang) ? lang : 'plaintext';
+    return hljs.highlight(validLang, code).value;
+  }
+});
 export default {
   name: 'ChatContainer',
-  props: {
-    chatHistories: {
-      type: Array,
-      default: () => []
-    },
-    messages: {
-      type: Array,
-      default: () => []
-    },
-    inputMessage: {
-      type: String,
-      default: ''
-    }
-  },
+  //冲突合并3
   data() {
     return {
+      botAvatar:botAvatar,
+      dragging: false,
+      startY: 0,
+      startHeight: 0,
       isStreaming: false,
       isRecording: false,
       previewFiles: [],
@@ -186,192 +247,409 @@ export default {
       isWaitingForResponse: false
     };
   },
-  watch: {
+  components: {
+    EnhancedCodeBlock
+  },
+  props: {
+    chatHistories: {
+      type: Array,
+      default: () => []
+    },
     messages: {
-      handler() {
-        this.scrollToBottom();
-        // 检查是否有消息正在流式加载
-        this.isStreaming = this.messages.some(msg => msg.isStreaming);
-        // 如果没有消息在流式加载，重置等待状态
-        if (!this.isStreaming) {
-          this.isWaitingForResponse = false;
-        }
-      },
-      deep: true,
-      immediate: true
+      type: Array,
+      default: () => []
+    },
+    inputMessage: {
+      type: String,
+      default: ''
     }
   },
-  methods: {
-    handleWaitingResponse() {
-      // 当点击"回复中..."按钮时显示提示
-      ElMessage.warning('请等待当前回复完成后再发送新消息');
-    },
-    handleSendMessage() {
-      if (this.isWaitingForResponse) {
-        // 如果正在等待回复，显示提示
+  //冲突解决4
+methods: {
+      handleWaitingResponse() {
+        // 当点击"回复中..."按钮时显示提示
         this.$emit('show-error', '请等待当前回复完成后再发送新消息');
-        return;
-      }
+      },
+      handleDragStart(e) {
+        this.dragging = true;
+        this.startY = e.clientY;
+        this.startHeight = this.$refs.inputContainer.offsetHeight;
+        document.addEventListener('mousemove', this.handleDragMove);
+        document.addEventListener('mouseup', this.handleDragEnd);
+      },
+      handleDragMove(e) {
+        if (!this.dragging) return;
+        const deltaY = this.startY - e.clientY;
+        const newHeight = this.startHeight + deltaY;
+        this.$refs.inputContainer.style.height = `${Math.max(120, Math.min(300, newHeight))}px`;
+      },
+      handleDragEnd() {
+        this.dragging = false;
+        document.removeEventListener('mousemove', this.handleDragMove);
+        document.removeEventListener('mouseup', this.handleDragEnd);
+      },
+      renderMarkdownBlocks(content, isStreaming = false) {
+        const protectedContent = content
+            // 保护显示公式 \[...\]
+            .replace(/\\\[([\s\S]*?)\\\]/g, (match, p1) => {
+              return `<span class="math-raw display">\\[${p1}\\]</span>`;
+            })
+            // 保护行内公式 \(...\)
+            .replace(/\\\(([\s\S]*?)\\\)/g, (match, p1) => {
+              return `<span class="math-raw inline">\\(${p1}\\)</span>`;
+            })
+            // 保护传统格式 $$...$$ 和 $...$
+            .replace(/\$\$([\s\S]*?)\$\$/g, (match, p1) => {
+              return `<span class="math-raw display">$$${p1}$$</span>`;
+            })
+            .replace(/\$([^\$]*?)\$/g, (match, p1) => {
+              return `<span class="math-raw inline">$${p1}$</span>`;
+            });
+        if (isStreaming) {
+          const preservedContent = content
+              .replace(/\$\$(.*?)\$\$/gs, '<span class="math-raw">$$$1$$</span>')
+              .replace(/\\\((.*?)\\\)/gs, '<span class="math-raw">\\($1\\)</span>');
+          // 流式响应时直接显示原始内容，但保留基本格式处理
+          return [{
+            type: 'html',
+            content: this.sanitizeHtml(md.renderInline(preservedContent))
+          }];
+        }
+        const tokens = md.parse(content || '', {});
+        console.log("解析后的Tokens:", tokens); // 调试输出
+        const blocks = [];
+        let htmlTokens = [];
 
-      if (this.inputMessage.trim() || this.previewFiles.length > 0) {
-        this.isWaitingForResponse = true; // 设置等待状态
-        // 准备发送的数据
-        const formData = new FormData();
-        formData.append('message', this.inputMessage);
-        
-        // 添加文件
-        this.previewFiles.forEach((file, index) => {
-          formData.append(`file${index}`, file);
+        for (let i = 0; i < tokens.length; i++) {
+          const token = tokens[i];
+
+          if (token.type === 'fence') {
+            if (htmlTokens.length) {
+              blocks.push({
+                type: 'html',
+                content: this.sanitizeHtml(md.renderer.render(htmlTokens, md.options, {}))
+              });
+              htmlTokens = [];
+            }
+            blocks.push({
+              type: 'code',
+              language: token.info.trim(),
+              code: token.content
+            });
+          } else {
+            htmlTokens.push(token);
+          }
+        }
+
+        if (htmlTokens.length) {
+          blocks.push({
+            type: 'html',
+            content: this.sanitizeHtml(md.renderer.render(htmlTokens, md.options, {}))
+          });
+        }
+
+        // 确保 MathJax 渲染
+        this.$nextTick(() => {
+          this.renderMathJax();
         });
 
-        // 发送消息事件
-        this.$emit('send-message', formData);
-        
-        // 清空预览文件
-        this.previewFiles = [];
-      }
-    },
-    scrollToBottom() {
-      this.$nextTick(() => {
-        const container = this.$refs.chatContainer;
-        if (container) {
-          container.scrollTop = container.scrollHeight;
-        }
-      });
-    },
-    handleTerminateConversation() {
-      this.$emit('terminate-conversation');
-    },
-    getFileIcon(fileType) {
-      const icons = {
-        'text/plain': 'fa-file-alt',
-        'application/pdf': 'fa-file-pdf',
-        'application/msword': 'fa-file-word',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'fa-file-word',
-        'application/vnd.ms-excel': 'fa-file-excel',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'fa-file-excel',
-        'application/vnd.ms-powerpoint': 'fa-file-powerpoint',
-        'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'fa-file-powerpoint',
-        'application/zip': 'fa-file-archive',
-        'application/x-rar-compressed': 'fa-file-archive',
-        'image/jpeg': 'fa-file-image',
-        'image/png': 'fa-file-image',
-        'image/gif': 'fa-file-image'
-      };
-      return icons[fileType] || 'fa-file';
-    },
-    async handleFileUpload(event) {
-      const files = Array.from(event.target.files);
-      for (const file of files) {
-        if (!this.allowedFileTypes.includes(file.type)) {
-          this.$emit('show-error', `不支持的文件类型: ${file.type}`);
-          continue;
-        }
-        if (file.size > this.maxFileSize) {
-          this.$emit('show-error', `文件大小超过限制: ${file.name}`);
-          continue;
-        }
-        
-        if (file.type.startsWith('image/')) {
-          const preview = await this.createImagePreview(file);
-          this.previewFiles.push({ ...file, preview });
-        } else {
-          this.previewFiles.push(file);
-        }
-      }
-      event.target.value = ''; // 清空input，允许重复选择相同文件
-    },
-    async handleImageUpload(event) {
-      const files = Array.from(event.target.files);
-      for (const file of files) {
-        if (!file.type.startsWith('image/')) {
-          this.$emit('show-error', `请选择图片文件: ${file.name}`);
-          continue;
-        }
-        if (file.size > this.maxFileSize) {
-          this.$emit('show-error', `图片大小超过限制: ${file.name}`);
-          continue;
-        }
-        
-        const preview = await this.createImagePreview(file);
-        this.previewFiles.push({ ...file, preview });
-      }
-      event.target.value = '';
-    },
-    createImagePreview(file) {
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target.result);
-        reader.readAsDataURL(file);
-      });
-    },
-    removePreview(index) {
-      this.previewFiles.splice(index, 1);
-    },
-    handleCodeUpload() {
-      // 触发代码上传事件
-      this.$emit('upload-code');
-    },
-    async handleRecording() {
-      if (!this.isRecording) {
-        try {
-          // 开始录音
-          this.isRecording = true;
-          this.$emit('start-recording');
-        } catch (error) {
-          this.$emit('show-error', '无法启动录音功能');
-          this.isRecording = false;
-        }
-      } else {
-        // 停止录音
-        this.isRecording = false;
-        this.$emit('stop-recording');
-      }
-    },
-    // 检查是否包含思考内容
-    hasReasoningContent(content) {
-      return content.includes('[REASONING_START]') && content.includes('[REASONING_END]');
-    },
+        return blocks;
+      },
+      // 添加流式内容处理方法
+      processStreamingContent(content) {
+        // 先保护所有数学公式
+        let processed = content
+            .replace(/\\\[([\s\S]*?)\\\]|\\\(([\s\S]*?)\\\)|\$\$([\s\S]*?)\$\$|\$([^\$]*?)\$/g, (match) => {
+              return `<span class="math-protected">${match}</span>`;
+            });
 
-    // 获取思考内容
-    getReasoningContent(content) {
-      const startIndex = content.indexOf('[REASONING_START]') + '[REASONING_START]'.length;
-      const endIndex = content.indexOf('[REASONING_END]');
-      if (startIndex === -1 || endIndex === -1) return '';
-      
-      const reasoningContent = content.substring(startIndex, endIndex).trim();
-      // 移除可能存在的标签
-      return DOMPurify.sanitize(marked.parse(reasoningContent.replace(/\[REASONING_START\]|\[REASONING_END\]/g, '')));
-    },
+        // 然后处理换行等基本格式
+        processed = processed.replace(/\n/g, '<br>');
 
-    // 获取最终回答内容
-    getAnswerContent(content) {
-      const endIndex = content.indexOf('[REASONING_END]');
-      if (endIndex === -1) return DOMPurify.sanitize(marked.parse(content));
-      
-      const answerContent = content.substring(endIndex + '[REASONING_END]'.length).trim();
-      // 移除可能存在的标签
-      return DOMPurify.sanitize(marked.parse(answerContent.replace(/\[REASONING_START\]|\[REASONING_END\]/g, '')));
-    }
-  }
-};
+        // 最后恢复保护的公式
+        processed = processed.replace(/<span class="math-protected">(.*?)<\/span>/g, (match, p1) => {
+          return p1; // 保留原始公式格式
+        });
+
+        return processed;
+      },
+      // 渲染Markdown内容
+      renderMathJax() {
+        if (!window.MathJax || this.renderingMathJax) return;
+
+        this.renderingMathJax = true;
+        console.log('开始渲染 MathJax');
+
+        // 清除之前的渲染
+        if (window.MathJax.typesetClear) {
+          window.MathJax.typesetClear();
+        }
+
+        // 使用 Promise 链确保顺序执行
+        Promise.resolve()
+            .then(() => {
+              return window.MathJax.typesetPromise()
+                  .catch(err => {
+                    console.error('MathJax 第一次渲染失败:', err);
+                    // 延迟后重试一次
+                    return new Promise(resolve => setTimeout(resolve, 500))
+                        .then(() => window.MathJax.typesetPromise());
+                  });
+            })
+            .then(() => {
+              console.log('MathJax 渲染完成');
+            })
+            .catch(err => {
+              console.error('MathJax 最终渲染失败:', err);
+            })
+            .finally(() => {
+              this.renderingMathJax = false;
+            });
+      },
+      sanitizeHtml(html) {
+        return DOMPurify.sanitize(html, {
+          ADD_TAGS: ['math', 'mrow', 'mi', 'mo', 'mn', 'msup', 'msub', 'mfrac', 'mtable', 'mtr', 'mtd', 'mjx-container', 'mjx-assistive-mml'],
+          ADD_ATTR: ['display', 'mathbackground', 'mathcolor', 'mathsize', 'data-mjx-texclass', 'jax', 'chtml', 'data-mjx-math', 'aria-hidden'],
+          ALLOW_DATA_ATTR: true,
+          FORBID_ATTR: ['style', 'on*'],
+          ALLOW_UNKNOWN_PROTOCOLS: true  // 允许 MathJax 的特殊协议
+        });
+      },
+      handleSendMessage() {
+        if (this.isWaitingForResponse) {
+          // 如果正在等待回复，显示提示
+          this.$emit('show-error', '请等待当前回复完成后再发送新消息');
+          return;
+        }
+
+        if (this.inputMessage.trim() || this.previewFiles.length > 0) {
+          this.isWaitingForResponse = true; // 设置等待状态
+          // 准备发送的数据
+          const formData = new FormData();
+          formData.append('message', this.inputMessage);
+
+          // 添加文件
+          this.previewFiles.forEach((file, index) => {
+            formData.append(`file${index}`, file);
+          });
+
+          // 发送消息事件
+          this.$emit('send-message', formData);
+
+          // 清空预览文件
+          this.previewFiles = [];
+        }
+      },
+      scrollToBottom() {
+        if (this.$refs.chatContainer) {
+          this.$refs.chatContainer.scrollTop = this.$refs.chatContainer.scrollHeight;
+        }
+        //冲突解决6
+        this.$nextTick(() => {
+              const container = this.$refs.chatContainer;
+              if (container) {
+                // 使用scrollTo确保平滑滚动
+                container.scrollTo({
+                  top: container.scrollHeight,
+                  behavior: 'smooth'
+                });
+
+                // 设置一个延时，确保在内容完全加载后再次滚动
+                setTimeout(() => {
+                  container.scrollTo({
+                    top: container.scrollHeight,
+                    behavior: 'smooth'
+                  });
+                }, 100);
+              }
+                const inputContainer = this.$refs.inputContainer;
+                if (container && inputContainer) {
+                  // 计算输入框的实际高度
+                  const inputHeight = inputContainer.offsetHeight;
+                  // 设置CSS变量
+                  document.documentElement.style.setProperty('--input-height', `${inputHeight}px`);
+
+                  // 滚动到底部
+                  container.scrollTo({
+                    top: container.scrollHeight,
+                    behavior: 'smooth'
+                  });
+                }
+              });
+            },
+            handleTerminateConversation() {
+          this.$emit('terminate-conversation');
+        },
+        getFileIcon(fileType) {
+          const icons = {
+            'text/plain': 'fa-file-alt',
+            'application/pdf': 'fa-file-pdf',
+            'application/msword': 'fa-file-word',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'fa-file-word',
+            'application/vnd.ms-excel': 'fa-file-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'fa-file-excel',
+            'application/vnd.ms-powerpoint': 'fa-file-powerpoint',
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'fa-file-powerpoint',
+            'application/zip': 'fa-file-archive',
+            'application/x-rar-compressed': 'fa-file-archive',
+            'image/jpeg': 'fa-file-image',
+            'image/png': 'fa-file-image',
+            'image/gif': 'fa-file-image'
+          };
+          return icons[fileType] || 'fa-file';
+        },
+        async handleFileUpload(event) {
+          const files = Array.from(event.target.files);
+          for (const file of files) {
+            if (!this.allowedFileTypes.includes(file.type)) {
+              this.$emit('show-error', `不支持的文件类型: ${file.type}`);
+              continue;
+            }
+            if (file.size > this.maxFileSize) {
+              this.$emit('show-error', `文件大小超过限制: ${file.name}`);
+              continue;
+            }
+
+            if (file.type.startsWith('image/')) {
+              const preview = await this.createImagePreview(file);
+              this.previewFiles.push({ ...file, preview });
+            } else {
+              this.previewFiles.push(file);
+            }
+          }
+          event.target.value = ''; // 清空input，允许重复选择相同文件
+        },
+        async handleImageUpload(event) {
+          const files = Array.from(event.target.files);
+          for (const file of files) {
+            if (!file.type.startsWith('image/')) {
+              this.$emit('show-error', `请选择图片文件: ${file.name}`);
+              continue;
+            }
+            if (file.size > this.maxFileSize) {
+              this.$emit('show-error', `图片大小超过限制: ${file.name}`);
+              continue;
+            }
+
+            const preview = await this.createImagePreview(file);
+            this.previewFiles.push({ ...file, preview });
+          }
+          event.target.value = '';
+        },
+        createImagePreview(file) {
+          return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.readAsDataURL(file);
+          });
+        },
+        removePreview(index) {
+          this.previewFiles.splice(index, 1);
+        },
+        handleCodeUpload() {
+          // 触发代码上传事件
+          this.$emit('upload-code');
+        },
+        async handleRecording() {
+          if (!this.isRecording) {
+            try {
+              // 开始录音
+              this.isRecording = true;
+              this.$emit('start-recording');
+            } catch (error) {
+              this.$emit('show-error', '无法启动录音功能');
+              this.isRecording = false;
+            }
+          } else {
+            // 停止录音
+            this.isRecording = false;
+            this.$emit('stop-recording');
+          }
+        },
+        // 检查是否包含思考内容
+        hasReasoningContent(content) {
+          return content.includes('[REASONING_START]') && content.includes('[REASONING_END]');
+        },
+
+        // 获取思考内容
+        getReasoningContent(content) {
+          const startIndex = content.indexOf('[REASONING_START]') + '[REASONING_START]'.length;
+          const endIndex = content.indexOf('[REASONING_END]');
+          if (startIndex === -1 || endIndex === -1) return '';
+
+          const reasoningContent = content.substring(startIndex, endIndex).trim();
+          // 移除可能存在的标签
+          return DOMPurify.sanitize(marked.parse(reasoningContent.replace(/\[REASONING_START\]|\[REASONING_END\]/g, '')));
+        },
+
+        // 获取最终回答内容
+        getAnswerContent(content) {
+          const endIndex = content.indexOf('[REASONING_END]');
+          if (endIndex === -1) return DOMPurify.sanitize(marked.parse(content));
+
+          const answerContent = content.substring(endIndex + '[REASONING_END]'.length).trim();
+          // 移除可能存在的标签
+          return DOMPurify.sanitize(marked.parse(answerContent.replace(/\[REASONING_START\]|\[REASONING_END\]/g, '')));
+        }
+      },
+      watch: {
+        messages: {
+          handler(newVal, oldVal) {
+            // 使用防抖防止频繁更新
+            clearTimeout(this.updateTimeout);
+            this.updateTimeout = setTimeout(() => {
+              this.$nextTick(() => {
+                this.scrollToBottom();
+
+                // 只有当有新消息时才渲染 MathJax
+                if (newVal.length !== oldVal?.length ||
+                    JSON.stringify(newVal[newVal.length-1]) !==
+                    JSON.stringify(oldVal[oldVal.length-1])) {
+                  this.renderMathJax();
+                }
+              });
+            }, 50);
+            // 检查是否有消息正在流式加载
+            this.isStreaming = this.messages.some(msg => msg.isStreaming);
+            // 如果没有消息在流式加载，重置等待状态
+            if (!this.isStreaming) {
+              this.isWaitingForResponse = false;
+            }
+          },
+          deep: true,
+          immediate:true
+        }
+      },
+      mounted() {
+        // 全局错误处理
+        window.addEventListener('error', (event) => {
+          if (event.message.includes('Maximum call stack size exceeded')) {
+            console.error('检测到调用栈溢出，正在恢复...');
+            this.recoverFromStackOverflow();
+            event.preventDefault();
+          }
+        });
+      },
+      updated() {
+        console.log("DOM更新完成");
+      }
+    };
 </script>
 
-<style scoped>
+<style>
 .chat-content-container {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  margin-left: 280px; /* 与侧边栏宽度一致 */
-  width: calc(100% - 280px); /* 计算剩余宽度 */
   height: 100vh;
+  margin: 0 auto;
   position: relative;
-  transition: margin-left 0.3s ease;
+  transition: padding-left 0.3s ease;
 }
 /* 侧边栏收起时的样式 */
 .sidebar-collapsed .chat-content-container {
-  margin-left: 70px;
+  padding-left: 70px;
   width: calc(100% - 70px);
 }
 
@@ -484,22 +762,30 @@ export default {
   flex: 1;
   padding: 20px;
   overflow-y: auto;
-  margin-bottom: 180px; /* 初始为输入框留出空间 */
+  margin-bottom: calc(var(--input-height) + 20px); /* 使用CSS变量动态计算 */
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding-top: 0; /* 移除原有的顶部内边距 */
+  width: 100%;
+  scrollbar-gutter: stable; /* 防止内容抖动 */
+  padding-bottom: 70px;
 }
 
 .message {
+  display: flex;
   margin-bottom: 20px;
+/*冲突解决7*/
   max-width: 70%;
+  max-width: 85%;
   width: 100%;
   animation: fade-in 0.3s ease-in-out;
-  display: flex;
-  flex-direction: column;
   opacity: 1;
   transition: opacity 0.3s ease;
+  position: relative;
+}
+.message-content-wrapper {
+  flex: 1;
+  min-width: 0;
 }
 
 @keyframes fade-in {
@@ -508,6 +794,15 @@ export default {
 }
 
 .user-message {
+  flex-direction: row-reverse;
+  justify-content: flex-end;
+}
+.user-message .avatar-container {
+  display: none; /* 用户消息不显示头像 */
+}
+.user-message .message-content-wrapper {
+  display: flex;
+  flex-direction: column;
   align-items: flex-end;
 }
 
@@ -523,7 +818,7 @@ export default {
 .message-content {
   padding: 15px;
   border-radius: 10px;
-  box-shadow: var(--shadow);
+  /*box-shadow: var(--shadow);阴影删除*/
   position: relative;
   max-width: 80%;
   transition: all 0.3s ease;
@@ -536,8 +831,9 @@ export default {
 }
 
 .bot-message .message-content {
-  background-color: white;
+  background-color: #F8F9FA;
   border-bottom-left-radius: 0;
+  padding-left: 30px;
 }
 
 .system-message .message-content {
@@ -605,30 +901,6 @@ export default {
   50% { opacity: 1; }
 }
 
-/* 流式消息样式 */
-.message.streaming .message-content {
-  position: relative;
-}
-
-.message.streaming .message-content::after {
-  content: "";
-  position: absolute;
-  bottom: -10px;
-  left: 0;
-  width: 100%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--primary-color), transparent);
-  animation: streaming 1.5s infinite;
-}
-
-@keyframes streaming {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
-  }
-}
 
 /* 输入框样式 */
 .input-fixed-container {
@@ -645,9 +917,12 @@ export default {
   z-index: 5;
   resize: vertical;
   overflow: auto;
-  min-height: 120px;
+  min-height: 150px;
   max-height: 300px;
   cursor: ns-resize;
+  height: var(--input-height, 120px); /* 默认高度 */
+  box-sizing: border-box;
+  z-index: 101;
 }
 
 .input-fixed-container::before {
@@ -695,7 +970,7 @@ export default {
   border: 1px solid var(--light-color);
   resize: none;
   flex: 1;
-  min-height: 60px;
+  min-height: 40px;
   font-size: 14px;
   margin-bottom: 8px;
 }
@@ -724,16 +999,23 @@ export default {
 
 /* 响应式调整 */
 @media (max-width: 1024px) {
+  .chat-content-container {
+    max-width: 90%; /* 在小屏幕上缩小最大宽度 */
+  }
   .message {
     max-width: 90%;
   }
 }
 
 @media (max-width: 768px) {
+  .chat-content-container {
+    padding-left: 0;
+    max-width: 100%;
+  }
   .chat-container {
     flex: 1;
     padding: 20px;
-    overflow-y: auto;
+    overflow-y: hidden;
     margin-bottom: 180px; /* 初始为输入框留出空间 */
     display: flex;
     flex-direction: column;
@@ -747,6 +1029,7 @@ export default {
 
   .input-fixed-container {
     left: 70px;
+    width: 100%;
   }
   .input-fixed-container {
     left: 0;
@@ -796,7 +1079,149 @@ export default {
   border: none;
   cursor: pointer;
   z-index: 10;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+/* 头像样式 */
+.avatar-container {
+  flex-shrink: 0;
+  margin-right: -10px;
+  display: flex;
+  align-items: flex-start;
+  padding-top: 15px;
+  position: relative;
+  z-index: 100;
+}
+.avatar-circle {
+  width: 40px;             /* 设置你需要的宽高 */
+  height: 40px;
+  border-radius: 50%;      /* 圆形 */
+  overflow: hidden;        /* 裁剪超出部分 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-circle img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;       /* 等比例缩放并填充整个区域，可能会裁剪边缘 */
+}
+@media (max-width: 768px) {
+
+  .avatar-container {
+    margin-right: 8px;
+  }
+}
+.bot-avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.markdown-body table {
+  border-collapse: collapse !important;
+  margin: 1em 0 !important;
+  width: 100% !important;
+  border: 1px solid #dfe2e5 !important;
+  display: table !important; /* 确保使用table布局 */
+}
+
+.markdown-body table th,
+.markdown-body table td {
+  border: 1px solid #dfe2e5 !important;
+  padding: 6px 13px !important;
+  text-align: left !important;
+}
+
+.markdown-body table tr {
+  background-color: #fff !important;
+  border-top: 1px solid #c6cbd1 !important;
+}
+
+.markdown-body table tr:nth-child(2n) {
+  background-color: #f6f8fa !important;
+}
+
+/* MathJax公式样式 */
+mjx-container {
+  display: inline-block !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  line-height: normal !important;
+  vertical-align: middle !important;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  max-width: fit-content;
+}
+/* 修正行内公式对齐 */
+mjx-container[display="false"] {
+  display: inline-block !important;
+}
+
+mjx-container[jax="CHTML"][display="true"] {
+  display: block;
+  margin: 1em 0;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  max-width: fit-content;
+}
+/* 流式公式的临时样式 */
+.math-raw {
+  background-color: rgba(0,0,0,0.05);
+  border-radius: 3px;
+  padding: 0 2px;
+  display: inline-block;
+}
+.math-raw.display {
+  display: block;
+  text-align: center;
+  margin: 1em 0;
+  padding: 8px;
+}
+
+/* 防止公式换行 */
+.mjx-chtml {
+  white-space: nowrap;
+}
+
+/* 显示公式居中 */
+.mjx-chtml[display="true"] {
+  margin: 1em 0;
+  display: block !important;
+  text-align: center;
+}
+
+.MathJax {
+  color: inherit !important;
+  font-size: inherit !important;
+}
+
+/* 确保公式在流式响应中也能正确显示 */
+.streaming-math {
+  display: inline-block;
+  visibility: hidden;
+}
+
+.streaming-math.rendered {
+  visibility: visible;
+}
+.streaming-content {
+  /* 确保流式内容有合适的样式 */
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.streaming-math {
+  /* 流式公式的临时样式 */
+  display: inline-block;
+  background-color: rgba(0,0,0,0.05);
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.streaming-math.rendered {
+  /* 公式渲染完成后的样式 */
+  background-color: transparent;
+  padding: 0;
 }
 
 .preview-container {

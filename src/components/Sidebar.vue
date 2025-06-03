@@ -18,7 +18,7 @@
             @click="$emit('set-active-menu', 'chat')"
         >
           <i class="fas fa-comments"></i>
-          <span>智能对话</span>
+          <span style="font-family: 'KaiTi', '楷体', 'STKaiti', serif; font-size: 18px; font-weight: bold; color: #000;">智能对话</span>
         </div>
         <div
             class="menu-item"
@@ -27,7 +27,7 @@
             @click="$emit('set-active-menu', 'knowledge')"
         >
           <i class="fas fa-project-diagram"></i>
-          <span>知识图谱</span>
+          <span style="font-family: 'KaiTi', '楷体', 'STKaiti', serif; font-size: 18px; font-weight: bold; color: #000;">知识图谱</span>
         </div>
         <div
             class="menu-item"
@@ -36,9 +36,9 @@
             @click="$emit('set-active-menu', 'exercise')"
         >
           <i class="fas fa-tasks"></i>
-          <span>习题解析</span>
+          <span style="font-family: 'KaiTi', '楷体', 'STKaiti', serif; font-size: 18px; font-weight: bold; color: #000;">习题解析</span>
         </div>
-        <div
+        <!--<div
             class="menu-item"
             :class="{ 'active': activeMenu === 'resource' }"
             data-menu="resource"
@@ -46,7 +46,7 @@
         >
           <i class="fas fa-book"></i>
           <span>课程资源</span>
-        </div>
+        </div>-->
       </div>
 
       <div class="menu-section">
@@ -59,7 +59,7 @@
                 class="chat-history-item"
                 :class="{ 'active': activeHistoryIndex === index }"
             >
-              <div class="history-content" @click="$emit('set-active-history', index)">
+              <div class="history-content" @click="$emit('set-active-menu', 'chat');$emit('set-active-history', index)">
                 <div class="history-title">{{ history.title }}</div>
                 <div class="history-time">{{ history.time }}</div>
               </div>
@@ -113,15 +113,15 @@
       <div class="user-card-content">
         <div class="user-stats">
           <div class="stat-item">
-            <div class="stat-value">0</div>
+            <div class="stat-value">168</div>
             <div class="stat-label">对话次数</div>
           </div>
           <div class="stat-item">
-            <div class="stat-value">0</div>
+            <div class="stat-value">32</div>
             <div class="stat-label">学习天数</div>
           </div>
           <div class="stat-item">
-            <div class="stat-value">0</div>
+            <div class="stat-value">60</div>
             <div class="stat-label">已完成习题</div>
           </div>
         </div>
@@ -138,10 +138,10 @@
             <i class="fas fa-bookmark"></i>
             <span>学习收藏</span>
           </a>
-          <a href="#" class="user-menu-item">
+          <!--<a href="#" class="user-menu-item">
             <i class="fas fa-history"></i>
             <span>全部对话历史</span>
-          </a>
+          </a>-->
           <a href="#" class="user-menu-item" @click="$emit('logout')">
             <i class="fas fa-sign-out-alt"></i>
             <span>退出登录</span>
@@ -270,7 +270,7 @@ export default {
 }
 
 .menu-section {
-  margin-bottom: 20px;
+  margin-bottom: 0px;
   flex-shrink: 0;
   position: relative;
 }

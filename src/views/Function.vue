@@ -30,7 +30,7 @@
     <div class="main-content">
       <!-- 透明顶部边框 -->
       <div class="header">
-        <div class="current-topic">{{ currentTopic }}</div>
+        <div class="current-topic" style="font-weight: bold; color: #000;">{{ currentTopic }}</div>
         <div class="header-tools">
           <button class="create-chat-btn" @click="newChat">
             <i class="fas fa-plus"></i>
@@ -38,7 +38,33 @@
           </button>
         </div>
       </div>
-
+      <!-- 动态内容区 -->
+      <div class="content-area">
+        <!-- 知识图谱内容 -->
+        <KnowledgeGraph
+            v-if="activeMenu === 'knowledge'"
+            ref="knowledgeGraph"
+        />
+        <!-- 习题解析内容 -->
+        <ExerciseContainer
+            v-if="activeMenu === 'exercise'"
+            ref="exerciseContainer"
+        />
+        <!-- 聊天容器组件 -->
+        <ChatContainer
+            v-if="activeMenu === 'chat'"
+            :chat-histories="chatHistories"
+            :messages="messages"
+            :input-message="inputMessage"
+            @send-message="sendMessage"
+            @upload-file="uploadFile"
+            @upload-image="uploadImage"
+            @upload-code="uploadCode"
+            @start-recording="startRecording"
+            @update-input="updateInputMessage"
+        />
+      </div>
+//冲突解决1
       <!-- 聊天容器组件 -->
       <ChatContainer
           :chat-histories="chatHistories"
@@ -51,25 +77,26 @@
           @start-recording="startRecording"
           @update-input="updateInputMessage"
           @show-error="showErrorMessage"
+      <!-- 重命名对话框 -->
+      <RenameDialog
+          v-if="showRenameDialog"
+          :current-title="newSessionTitle"
+          @confirm="confirmRename"
+          @cancel="cancelRename"
+          @update-title="updateSessionTitle"
+      />
+
+      <!-- 删除对话框 -->
+      <DeleteDialog
+          v-if="showDeleteDialog"
+          @confirm="confirmDelete"
+          @cancel="cancelDelete"
       />
     </div>
-
-    <!-- 重命名对话框 -->
-    <RenameDialog
-        v-if="showRenameDialog"
-        :current-title="newSessionTitle"
-        @confirm="confirmRename"
-        @cancel="cancelRename"
-        @update-title="updateSessionTitle"
-    />
-
-    <!-- 删除对话框 -->
-    <DeleteDialog
-        v-if="showDeleteDialog"
-        @confirm="confirmDelete"
-        @cancel="cancelDelete"
-    />
-
+    <!-- 全局进度条 (固定在右侧) -->
+    <div class="global-progress">
+      <div class="progress-bar" :style="{height: progress + '%'}"></div>
+    </div>
     <!-- 个人信息编辑模态框 -->
     <ProfileModal
         v-if="showProfileModal"
@@ -94,6 +121,8 @@ import 'highlight.js/styles/github.css';
 // 导入组件
 import Sidebar from '@/components/Sidebar.vue';
 import ChatContainer from '@/components/ChatContainer.vue';
+import ExerciseContainer from '@/components/ExerciseContainer.vue';
+import KnowledgeGraph from '@/components/KnowledgeGraph.vue';
 import RenameDialog from '@/components/Dialog/RenameDialog.vue';
 import DeleteDialog from '@/components/Dialog/DeleteDialog.vue';
 import ProfileModal from '@/components/Dialog/ProfileModal.vue';
@@ -103,9 +132,41 @@ export default {
   components: {
     Sidebar,
     ChatContainer,
+    ExerciseContainer,
+    KnowledgeGraph,
     RenameDialog,
     DeleteDialog,
     ProfileModal
+  },
+  computed: {
+    activeComponent() {
+      // 根据当前活动菜单返回对应组件
+      const componentMap = {
+        chat: 'ChatContainer',
+        exercise: 'ExerciseContainer',
+        // 其他菜单对应的组件...
+      };
+      return componentMap[this.activeMenu] || 'ChatContainer';
+    },
+    componentProps() {
+      // 根据需要传递不同的props
+      if (this.activeMenu === 'chat') {
+        return {
+          chatHistories: this.chatHistories,
+          messages: this.messages,
+          inputMessage: this.inputMessage,
+          sendMessage: this.sendMessage,
+          uploadFile: this.uploadFile,
+          uploadImage: this.uploadImage,
+          uploadCode: this.uploadCode,
+          startRecording: this.startRecording,
+          updateInput: this.updateInputMessage
+        };
+      } else if (this.activeMenu === 'exercise') {
+        return {};
+      }
+      return {};
+    }
   },
   data() {
     return {
@@ -179,6 +240,7 @@ export default {
       marked.setOptions({
         gfm: true,
         breaks: true,
+        tables: true, // 启用表格支持
         highlight: (code, lang) => {
           const validLang = hljs.getLanguage(lang) ? lang : 'plaintext';
           return hljs.highlight(validLang, code).value;
@@ -706,6 +768,8 @@ export default {
 
         this.activeHistoryIndex = index;
         this.currentTopic = selectedHistory.title || '新会话';
+      // 无论当前在哪个界面，都切换到聊天界面
+        this.activeMenu = 'chat';
 
         // 显示加载中的提示
         this.messages = [{
@@ -1169,23 +1233,6 @@ export default {
     display: block;
   }
 }
-/* 添加在 Function.vue 的 style 部分 */
-.user-card-container {
-  position: relative;
-  z-index: 1000;
-}
-
-.user-card {
-  position: absolute;
-  bottom: 80px;
-  left: 20px;
-  width: 280px;
-  background-color: white;
-  border-radius: 12px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-  z-index: 100;
-  animation: slide-up 0.3s ease-out;
-}
 
 @keyframes slide-up {
   0% { transform: translateY(20px); opacity: 0; }
@@ -1249,7 +1296,8 @@ export default {
   flex-direction: column;
   overflow: hidden;
   margin-left: 280px;
-  transition: margin-left 0.3s ease;
+  transition: margin-left 0.3s;
+  position: relative;
 }
 
 .sidebar.collapsed ~ .main-content {
@@ -1302,6 +1350,9 @@ export default {
   .sidebar.collapsed ~ .main-content .current-topic {
     left: calc(50% + 10px); /* 侧边栏折叠时的调整 */
   }
+  .sidebar.collapsed ~ .main-content {
+    margin-left: 0;
+  }
 }
 .drag-handle {
   background-color: rgba(0, 0, 0, 0.1) !important;
@@ -1315,5 +1366,18 @@ export default {
 
 .drag-handle:hover {
   background-color: rgba(0, 0, 0, 0.2);
+}
+/*习题解析部分样式*/
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin-left: 280px;
+  transition: margin-left 0.3s ease;
+}
+
+.sidebar.collapsed ~ .main-content {
+  margin-left: 70px;
 }
 </style>

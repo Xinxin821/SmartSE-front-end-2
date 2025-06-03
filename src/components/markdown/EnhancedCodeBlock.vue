@@ -34,7 +34,7 @@
             @click="toggleLineNumbers"
             :title="showLineNumbers ? '隐藏行号' : '显示行号'"
         >
-          <i class="fas" :class="showLineNumbers ? 'fa-list-ol' : 'fa-list'"></i>
+          <i class="fas" :class="showLineNumbers ? 'fa-list' : 'fa-list-ol'"></i>
         </button>
       </div>
     </div>
@@ -45,9 +45,9 @@
       <div
           v-if="showLineNumbers"
           class="line-numbers"
-          ref="lineNumbers"
-          :style="{ height: codeContentHeight }"
-      >
+          ref="lineNumbers">
+<!--          :style="{ height: codeContentHeight }"-->
+
         <span
             v-for="n in lineCount"
             :key="n"
@@ -60,7 +60,7 @@
           ref="preElement"
           :style="{
           'margin-left': showLineNumbers ? lineNumbersWidth + 'px' : '0',
-          'height': codeContentHeight
+          // 'height': codeContentHeight
         }"
       >
         <code
@@ -146,22 +146,7 @@ export default {
   computed: {
     // 格式化后的语言显示名称
     formattedLanguage() {
-      if (!this.language) return 'TEXT'
-
-      const langMap = {
-        js: 'JavaScript',
-        py: 'Python',
-        java: 'Java',
-        cpp: 'C++',
-        cs: 'C#',
-        html: 'HTML',
-        xml: 'XML',
-        sql: 'SQL',
-        bash: 'Bash',
-        sh: 'Shell'
-      }
-
-      return langMap[this.language.toLowerCase()] || this.language.toUpperCase()
+      return this.language ? this.language.toUpperCase() : 'TEXT';
     },
 
     // 高亮后的代码HTML
@@ -190,6 +175,9 @@ export default {
     // 代码语言类名
     languageClass() {
       return this.language ? `language-${this.language}` : ''
+    },
+    lineCount() {
+      return this.code.split('\n').length;
     }
   },
   watch: {
@@ -198,7 +186,7 @@ export default {
       immediate: true,
       handler() {
         this.$nextTick(() => {
-          this.calculateLineNumbers()
+          /*this.calculateLineNumbers()*/
           this.updateLineNumbersWidth()
         })
       }
@@ -214,7 +202,7 @@ export default {
     }
   },
   mounted() {
-    this.calculateLineNumbers()
+    /*this.calculateLineNumbers()*/
     this.updateLineNumbersWidth()
 
     // 监听窗口变化调整行号宽度
@@ -283,7 +271,7 @@ export default {
     },
 
     // 计算行号
-    calculateLineNumbers() {
+  /*calculateLineNumbers() {
       if (!this.code) {
         this.lineCount = 0
         return
@@ -297,18 +285,22 @@ export default {
       if (this.$refs.codeElement) {
         this.codeContentHeight = this.$refs.codeElement.offsetHeight + 'px'
       }
-    },
+    },*/
 
     // 更新行号列宽度
     updateLineNumbersWidth() {
       if (!this.showLineNumbers || !this.$refs.lineNumbers) {
-        this.lineNumbersWidth = 0
+        this.lineNumbersWidth = 0;
         return
       }
 
       // 根据行号位数动态调整宽度
       const digitCount = String(this.lineCount).length
       this.lineNumbersWidth = digitCount * 10 + 20 // 根据数字位数计算宽度
+      // 动态调整 pre 的宽度
+      if (this.$refs.preElement) {
+        this.$refs.preElement.style.width = `calc(100% - ${this.lineNumbersWidth}px)`;
+      }
     },
 
     // 处理窗口大小变化
@@ -386,10 +378,11 @@ export default {
   position: relative;
   margin: 1.5em 0;
   border-radius: 8px;
-  overflow: hidden;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   background-color: #f6f8fa;
   transition: all 0.3s ease;
+  overflow-x: auto; /* 横向滚动 */
+  overflow-y: hidden;
 }
 
 .code-block-container:hover {
@@ -456,8 +449,10 @@ export default {
 .code-content-wrapper {
   position: relative;
   display: flex;
-  overflow: auto;
-  max-height: 600px;
+  overflow-x: auto; /* 仅横向滚动 */
+  overflow-y: hidden; /* 禁用纵向滚动 */
+  max-height: none; /* 移除固定高度 */
+  width: 100%; /* 确保宽度填满 */
 }
 
 /* 行号样式 */
@@ -472,7 +467,9 @@ export default {
   font-size: 13px;
   line-height: 1.5;
   user-select: none;
-  overflow: hidden;
+  position: sticky;
+  left: 0;
+  z-index: 1;
 }
 
 .line-number {
@@ -483,16 +480,19 @@ export default {
 pre {
   margin: 0;
   padding: 16px;
-  overflow: auto;
+  overflow: visible;
   flex-grow: 1;
   background-color: #f6f8fa;
+  width: 100%;
+  min-width: fit-content;
 }
 
 code {
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   font-size: 14px;
   line-height: 1.5;
-  display: block;
+  display: inline-block;
+  min-width: 100%;
 }
 
 /* 高亮行样式 */

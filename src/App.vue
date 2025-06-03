@@ -5,6 +5,7 @@
 </template>
 
 <script>
+import 'highlight.js/styles/github.css';
 export default {
   name: 'App'
 }
