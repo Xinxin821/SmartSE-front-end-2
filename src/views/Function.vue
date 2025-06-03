@@ -62,6 +62,7 @@
             @upload-code="uploadCode"
             @start-recording="startRecording"
             @update-input="updateInputMessage"
+            @show-error="showErrorMessage"
         />
       </div>
 
@@ -457,33 +458,64 @@ export default {
           const sessionData = response.data.data;
           this.currentTopic = sessionData.sessionTitle || sessionData.title || '新会话';
 
-          const messages = sessionData.chatMessages || [];
+          const rawMessages = sessionData.chatMessages || [];
+          this.messages = []; // 清空现有消息
 
-          this.messages = messages
-              .filter(msg => msg.senderType.toLowerCase() !== 'system')
-              .map(msg => {
-                let type;
-                switch (msg.senderType.toLowerCase()) {
-                  case 'user': type = 'user'; break;
-                  case 'assistant': type = 'bot'; break;
-                  default: type = 'system';
-                }
+          let i = 0;
+          while (i < rawMessages.length) {
+            const currentMsg = rawMessages[i];
 
-                return {
-                  type: type,
-                  content: msg.content || '',
-                  renderedContent: DOMPurify.sanitize(marked.parse(msg.content || '')), // 预渲染 Markdown
-                  time: new Date(msg.createdAt).toLocaleTimeString(),
-                  agent: type === 'bot' ? '智能助手' : undefined,
-                  rawData: {
-                    id: msg.id,
-                    sessionId: msg.sessionId,
-                    senderType: msg.senderType,
-                    contentType: msg.contentType
-                  }
-                };
+            // 处理用户消息
+            if (currentMsg.senderType.toLowerCase() === 'user') {
+              this.messages.push({
+                type: 'user',
+                content: currentMsg.content || '',
+                renderedContent: DOMPurify.sanitize(marked.parse(currentMsg.content || '')), // 预渲染用户消息
+                time: new Date(currentMsg.createdAt).toLocaleTimeString(),
+                rawData: currentMsg // 保留原始数据
               });
 
+              // 查找紧随其后的助手消息
+              const nextMsg = rawMessages[i + 1];
+              if (nextMsg && nextMsg.senderType.toLowerCase() === 'assistant') {
+                // 组合思考过程和最终回答
+                let botContent = nextMsg.content || '';
+                const reasoningProcess = currentMsg.reasoningProcess || '';
+
+                if (reasoningProcess) {
+                  // 使用特殊字符来标记思考过程，这些字符在显示时会被隐藏
+                  botContent = `[REASONING_START]${reasoningProcess}[REASONING_END]${botContent}`;
+                }
+                this.messages.push({
+                  type: 'bot',
+                  content: botContent,
+                  renderedContent: null, // 让ChatContainer组件处理包含标记的内容
+                  time: new Date(nextMsg.createdAt).toLocaleTimeString(),
+                  agent: '智能助手',
+                  rawData: nextMsg, // 保留原始数据
+                  hideReasoningTags: true // 添加标记，表示需要隐藏标签
+                });
+                i += 2; // 跳过用户消息和其后的助手消息
+              } else {
+                // 如果用户消息后没有紧随的助手消息，只处理用户消息
+                i += 1;
+              }
+            } else if (currentMsg.senderType.toLowerCase() === 'assistant') {
+              // 处理没有对应用户消息的独立助手消息（理论上不应该出现，但作为容错）
+              this.messages.push({
+                type: 'bot',
+                content: currentMsg.content || '',
+                renderedContent: DOMPurify.sanitize(marked.parse(currentMsg.content || '')),
+                time: new Date(currentMsg.createdAt).toLocaleTimeString(),
+                agent: '智能助手',
+                rawData: currentMsg
+              });
+              i += 1;
+            } else {
+              // 跳过其他类型的消息（如 system）
+              i += 1;
+            }
+          }
           this.scrollToBottom();
         }
       } catch (error) {
@@ -872,6 +904,8 @@ export default {
             // 使用Marked.js渲染Markdown
             // 在接收消息时，使用DOMPurify清理HTML并渲染 Markdown
             lastBotMessage.renderedContent = DOMPurify.sanitize(marked.parse(lastBotMessage.content));
+            // 重置等待状态More actions
+            this.$refs.chatContainer.isWaitingForResponse = false;
             this.$forceUpdate();
             this.scrollToBottom();
           }
