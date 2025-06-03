@@ -46,74 +46,141 @@
           </div>
         </div>
         <div class="message-content-wrapper">
-        <div class="message-content">
-          <!-- 使用动态组件渲染Markdown -->
-          <div v-if="message.type === 'bot' && message.isStreaming" class="streaming-content" ref="streamingContent">
-          <!-- 流式响应时直接显示原始内容 -->
-            <!-- 修改流式内容显示，添加基本Markdown支持 -->
-            <div class="markdown-body" v-html="sanitizeHtml(processStreamingContent(message.content))"></div>
-          <!-- 流式加载指示器 -->
-          <div class="streaming-indicator">
-            <div class="dot"></div>
-            <div class="dot"></div>
-            <div class="dot"></div>
-          </div>
-          </div>
-          <div v-else>
-            <template v-for="(block, bIdx) in renderMarkdownBlocks(message.content)" :key="bIdx">
-              <!-- 普通 Markdown 内容 -->
-              <div v-if="block.type === 'html'" class="markdown-body" v-html="block.content"/>
+          <div class="message-content">
+            //冲突解决1
+            <!-- 思考内容渲染 -->
+            <div v-if="message.type === 'bot' && message.content" class="thinking-content">
+              <div v-if="hasReasoningContent(message.content)" class="reasoning-section">
+                <div class="reasoning-header">思考过程</div>
+                <div class="reasoning-body" v-html="getReasoningContent(message.content)"></div>
+              </div>
+              <div class="answer-section" v-html="getAnswerContent(message.content)"></div>
+            </div>
+            <!-- 使用 v-html 渲染 Markdown，注意安全 -->
+            <div v-else-if="message.renderedContent" v-html="message.renderedContent"></div>
+            <!-- 纯文本回退 -->
+            <div v-else>{{ message.content }}</div>
+            <!-- 使用动态组件渲染Markdown -->
+            <div v-if="message.type === 'bot' && message.isStreaming" class="streaming-content" ref="streamingContent">
+              <!-- 流式响应时直接显示原始内容 -->
+              <!-- 修改流式内容显示，添加基本Markdown支持 -->
+              <div class="markdown-body" v-html="sanitizeHtml(processStreamingContent(message.content))"></div>
+              <!-- 流式加载指示器 -->
+              <div class="streaming-indicator">
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+              </div>
+            </div>
+            <div v-else>
+              <template v-for="(block, bIdx) in renderMarkdownBlocks(message.content)" :key="bIdx">
+                <!-- 普通 Markdown 内容 -->
+                <div v-if="block.type === 'html'" class="markdown-body" v-html="block.content"/>
 
-              <!-- 代码块 -->
-              <EnhancedCodeBlock
-                  v-else-if="block.type === 'code'"
-                  :code="block.code"
-                  :language="block.language"
-              />
+                <!-- 代码块 -->
+                <EnhancedCodeBlock
+                    v-else-if="block.type === 'code'"
+                    :code="block.code"
+                    :language="block.language"
+                />
               </template>
+            </div>
+          </div>
+          <div class="message-info" v-if="message.content != null">
+            <span>{{ message.type === 'user' ? '您' : message.type === 'system' ? '系统' : '' }} {{ message.time }}</span>
+            <span v-if="message.agent" class="agent-tag">{{ message.agent }}</span>
           </div>
         </div>
-        <div class="message-info" v-if="message.content != null">
-          <span>{{ message.type === 'user' ? '您' : message.type === 'system' ? '系统' : '' }} {{ message.time }}</span>
-          <span v-if="message.agent" class="agent-tag">{{ message.agent }}</span>
-        </div>
-      </div>
       </div>
     </div>
 
     <!-- 输入框部分 - 只在有会话时显示 -->
-    <div v-if="chatHistories.length > 0" class="input-fixed-container" id="inputContainer" @mousedown="handleDragStart" ref="inputContainer" >
-      <div class="input-tools">
-        <button class="input-tool" title="上传文件" @click="$emit('upload-file')">
-          <i class="fas fa-paperclip"></i>
-        </button>
-        <button class="input-tool" title="上传图片" @click="$emit('upload-image')">
-          <i class="fas fa-image"></i>
-        </button>
-        <button class="input-tool" title="上传代码" @click="$emit('upload-code')">
-          <i class="fas fa-code"></i>
-        </button>
-        <button class="input-tool" title="录音" @click="$emit('start-recording')">
-          <i class="fas fa-microphone"></i>
-        </button>
+    //冲突解决2
+    <div v-if="chatHistories.length > 0" class="input-fixed-container" id="inputContainer" ref="inputContainer">
+      <!-- 文件预览区域 -->
+      <div v-if="previewFiles.length > 0" class="preview-container">
+        <div v-for="(file, index) in previewFiles" :key="index" class="preview-item">
+          <div class="preview-content">
+            <!-- 图片预览 -->
+            <img v-if="file.type.startsWith('image/')" :src="file.preview" class="preview-image" />
+            <!-- 文件预览 -->
+            <div v-else class="preview-file">
+              <i class="fas" :class="getFileIcon(file.type)"></i>
+              <span class="file-name">{{ file.name }}</span>
+            </div>
+          </div>
+          <button class="remove-preview" @click="removePreview(index)">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
       </div>
 
-      <textarea
-          placeholder="请输入您的问题或指令..."
-          :value="inputMessage"
-          @input="$emit('update-input', $event.target.value)"
-          @keyup.enter="handleSendMessage"
-      ></textarea>
+      <div v-if="chatHistories.length > 0" class="input-fixed-container" id="inputContainer" @mousedown="handleDragStart" ref="inputContainer" >
+        <div class="input-tools">
+          <input
+              type="file"
+              ref="fileInput"
+              style="display: none"
+              @change="handleFileUpload"
+              multiple
+              accept=".txt,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.rar,.jpg,.jpeg,.png,.gif"
+          />
+          <input
+              type="file"
+              ref="imageInput"
+              style="display: none"
+              @change="handleImageUpload"
+              accept="image/*"
+              multiple
+          />
+          <button class="input-tool" title="上传文件" @click="$refs.fileInput.click()">
+            <i class="fas fa-paperclip"></i>
+          </button>
+          <button class="input-tool" title="上传图片" @click="$refs.imageInput.click()">
+            <i class="fas fa-image"></i>
+          </button>
+          <button class="input-tool" title="上传代码" @click="handleCodeUpload">
+            <i class="fas fa-code"></i>
+          </button>
+          <button class="input-tool" title="录音" @click="handleRecording" :class="{ 'recording': isRecording }">
+            <i class="fas fa-microphone"></i>
+          </button>
+        </div>
 
-      <button class="input-submit" @click="handleSendMessage">
-        发送
-      </button>
+        <textarea
+            placeholder="请输入您的问题或指令..."
+            :value="inputMessage"
+            @input="$emit('update-input', $event.target.value)"
+            @keyup.enter="handleSendMessage"
+            :disabled="isRecording"
+        ></textarea>
+
+        <button
+            v-if="!isStreaming && !isWaitingForResponse"
+            class="input-submit"
+            @click="handleSendMessage"
+            :disabled="isRecording"
+        >
+          发送
+        </button>
+        <button
+            v-else
+            class="input-submit"
+            @click="handleWaitingResponse"
+        >
+          回复中...
+        </button>
+      </div>
     </div>
   </div>
 </template>
 
 
 <script>
+//冲突解决3
+import { ElMessage } from 'element-plus';
+import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import hljs from 'highlight.js';
@@ -156,13 +223,29 @@ marked.setOptions({
 });
 export default {
   name: 'ChatContainer',
+  //冲突合并3
   data() {
     return {
       botAvatar:botAvatar,
       dragging: false,
       startY: 0,
-      startHeight: 0
-    }
+      startHeight: 0,
+      isStreaming: false,
+      isRecording: false,
+      previewFiles: [],
+      maxFileSize: 10 * 1024 * 1024, // 10MB
+      allowedFileTypes: [
+        'text/plain', 'application/pdf', 'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.ms-powerpoint',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'application/zip', 'application/x-rar-compressed',
+        'image/jpeg', 'image/png', 'image/gif'
+      ],
+      isWaitingForResponse: false
+    };
   },
   components: {
     EnhancedCodeBlock
@@ -181,215 +264,376 @@ export default {
       default: ''
     }
   },
-  methods: {
-    handleDragStart(e) {
-      this.dragging = true;
-      this.startY = e.clientY;
-      this.startHeight = this.$refs.inputContainer.offsetHeight;
-      document.addEventListener('mousemove', this.handleDragMove);
-      document.addEventListener('mouseup', this.handleDragEnd);
-    },
-    handleDragMove(e) {
-      if (!this.dragging) return;
-      const deltaY = this.startY - e.clientY;
-      const newHeight = this.startHeight + deltaY;
-      this.$refs.inputContainer.style.height = `${Math.max(120, Math.min(300, newHeight))}px`;
-    },
-    handleDragEnd() {
-      this.dragging = false;
-      document.removeEventListener('mousemove', this.handleDragMove);
-      document.removeEventListener('mouseup', this.handleDragEnd);
-    },
-    renderMarkdownBlocks(content, isStreaming = false) {
-      const protectedContent = content
-          // 保护显示公式 \[...\]
-          .replace(/\\\[([\s\S]*?)\\\]/g, (match, p1) => {
-            return `<span class="math-raw display">\\[${p1}\\]</span>`;
-          })
-          // 保护行内公式 \(...\)
-          .replace(/\\\(([\s\S]*?)\\\)/g, (match, p1) => {
-            return `<span class="math-raw inline">\\(${p1}\\)</span>`;
-          })
-          // 保护传统格式 $$...$$ 和 $...$
-          .replace(/\$\$([\s\S]*?)\$\$/g, (match, p1) => {
-            return `<span class="math-raw display">$$${p1}$$</span>`;
-          })
-          .replace(/\$([^\$]*?)\$/g, (match, p1) => {
-            return `<span class="math-raw inline">$${p1}$</span>`;
-          });
-      if (isStreaming) {
-        const preservedContent = content
-            .replace(/\$\$(.*?)\$\$/gs, '<span class="math-raw">$$$1$$</span>')
-            .replace(/\\\((.*?)\\\)/gs, '<span class="math-raw">\\($1\\)</span>');
-        // 流式响应时直接显示原始内容，但保留基本格式处理
-        return [{
-          type: 'html',
-          content: this.sanitizeHtml(md.renderInline(preservedContent))
-        }];
-      }
-      const tokens = md.parse(content || '', {});
-      console.log("解析后的Tokens:", tokens); // 调试输出
-      const blocks = [];
-      let htmlTokens = [];
-
-      for (let i = 0; i < tokens.length; i++) {
-        const token = tokens[i];
-
-        if (token.type === 'fence') {
-          if (htmlTokens.length) {
-            blocks.push({
-              type: 'html',
-              content: this.sanitizeHtml(md.renderer.render(htmlTokens, md.options, {}))
-            });
-            htmlTokens = [];
-          }
-          blocks.push({
-            type: 'code',
-            language: token.info.trim(),
-            code: token.content
-          });
-        } else {
-          htmlTokens.push(token);
-        }
-      }
-
-      if (htmlTokens.length) {
-        blocks.push({
-          type: 'html',
-          content: this.sanitizeHtml(md.renderer.render(htmlTokens, md.options, {}))
-        });
-      }
-
-      // 确保 MathJax 渲染
-      this.$nextTick(() => {
-        this.renderMathJax();
-      });
-
-      return blocks;
-    },
-    // 添加流式内容处理方法
-    processStreamingContent(content) {
-      // 先保护所有数学公式
-      let processed = content
-          .replace(/\\\[([\s\S]*?)\\\]|\\\(([\s\S]*?)\\\)|\$\$([\s\S]*?)\$\$|\$([^\$]*?)\$/g, (match) => {
-            return `<span class="math-protected">${match}</span>`;
-          });
-
-      // 然后处理换行等基本格式
-      processed = processed.replace(/\n/g, '<br>');
-
-      // 最后恢复保护的公式
-      processed = processed.replace(/<span class="math-protected">(.*?)<\/span>/g, (match, p1) => {
-        return p1; // 保留原始公式格式
-      });
-
-      return processed;
-  },
-    // 渲染Markdown内容
-    renderMathJax() {
-      if (!window.MathJax || this.renderingMathJax) return;
-
-      this.renderingMathJax = true;
-      console.log('开始渲染 MathJax');
-
-      // 清除之前的渲染
-      if (window.MathJax.typesetClear) {
-        window.MathJax.typesetClear();
-      }
-
-      // 使用 Promise 链确保顺序执行
-      Promise.resolve()
-          .then(() => {
-            return window.MathJax.typesetPromise()
-                .catch(err => {
-                  console.error('MathJax 第一次渲染失败:', err);
-                  // 延迟后重试一次
-                  return new Promise(resolve => setTimeout(resolve, 500))
-                      .then(() => window.MathJax.typesetPromise());
-                });
-          })
-          .then(() => {
-            console.log('MathJax 渲染完成');
-          })
-          .catch(err => {
-            console.error('MathJax 最终渲染失败:', err);
-          })
-          .finally(() => {
-            this.renderingMathJax = false;
-          });
-    },
-    sanitizeHtml(html) {
-      return DOMPurify.sanitize(html, {
-        ADD_TAGS: ['math', 'mrow', 'mi', 'mo', 'mn', 'msup', 'msub', 'mfrac', 'mtable', 'mtr', 'mtd', 'mjx-container', 'mjx-assistive-mml'],
-        ADD_ATTR: ['display', 'mathbackground', 'mathcolor', 'mathsize', 'data-mjx-texclass', 'jax', 'chtml', 'data-mjx-math', 'aria-hidden'],
-        ALLOW_DATA_ATTR: true,
-        FORBID_ATTR: ['style', 'on*'],
-        ALLOW_UNKNOWN_PROTOCOLS: true  // 允许 MathJax 的特殊协议
-      });
-    },
-    handleSendMessage() {
-      if (this.inputMessage.trim()) {
-        this.$emit('send-message');
-      }
-    },
-    scrollToBottom() {
-      if (this.$refs.chatContainer) {
-        this.$refs.chatContainer.scrollTop = this.$refs.chatContainer.scrollHeight;
-      }
-      this.$nextTick(() => {
-        const container = this.$refs.chatContainer;
-        const inputContainer = this.$refs.inputContainer;
-        if (container && inputContainer) {
-          // 计算输入框的实际高度
-          const inputHeight = inputContainer.offsetHeight;
-          // 设置CSS变量
-          document.documentElement.style.setProperty('--input-height', `${inputHeight}px`);
-
-          // 滚动到底部
-          container.scrollTo({
-            top: container.scrollHeight,
-            behavior: 'smooth'
-          });
-        }
-      });
-    }
-},
-  watch: {
-    messages: {
-      handler(newVal, oldVal) {
-        // 使用防抖防止频繁更新
-        clearTimeout(this.updateTimeout);
-        this.updateTimeout = setTimeout(() => {
-          this.$nextTick(() => {
-            this.scrollToBottom();
-
-            // 只有当有新消息时才渲染 MathJax
-            if (newVal.length !== oldVal?.length ||
-                JSON.stringify(newVal[newVal.length-1]) !==
-                JSON.stringify(oldVal[oldVal.length-1])) {
-              this.renderMathJax();
-            }
-          });
-        }, 50);
+  //冲突解决4
+methods: {
+      handleWaitingResponse() {
+        // 当点击"回复中..."按钮时显示提示
+        this.$emit('show-error', '请等待当前回复完成后再发送新消息');
       },
-      deep: true,
-      immediate:true
-    }
-  },
-  mounted() {
-    // 全局错误处理
-    window.addEventListener('error', (event) => {
-      if (event.message.includes('Maximum call stack size exceeded')) {
-        console.error('检测到调用栈溢出，正在恢复...');
-        this.recoverFromStackOverflow();
-        event.preventDefault();
+      handleDragStart(e) {
+        this.dragging = true;
+        this.startY = e.clientY;
+        this.startHeight = this.$refs.inputContainer.offsetHeight;
+        document.addEventListener('mousemove', this.handleDragMove);
+        document.addEventListener('mouseup', this.handleDragEnd);
+      },
+      handleDragMove(e) {
+        if (!this.dragging) return;
+        const deltaY = this.startY - e.clientY;
+        const newHeight = this.startHeight + deltaY;
+        this.$refs.inputContainer.style.height = `${Math.max(120, Math.min(300, newHeight))}px`;
+      },
+      handleDragEnd() {
+        this.dragging = false;
+        document.removeEventListener('mousemove', this.handleDragMove);
+        document.removeEventListener('mouseup', this.handleDragEnd);
+      },
+      renderMarkdownBlocks(content, isStreaming = false) {
+        const protectedContent = content
+            // 保护显示公式 \[...\]
+            .replace(/\\\[([\s\S]*?)\\\]/g, (match, p1) => {
+              return `<span class="math-raw display">\\[${p1}\\]</span>`;
+            })
+            // 保护行内公式 \(...\)
+            .replace(/\\\(([\s\S]*?)\\\)/g, (match, p1) => {
+              return `<span class="math-raw inline">\\(${p1}\\)</span>`;
+            })
+            // 保护传统格式 $$...$$ 和 $...$
+            .replace(/\$\$([\s\S]*?)\$\$/g, (match, p1) => {
+              return `<span class="math-raw display">$$${p1}$$</span>`;
+            })
+            .replace(/\$([^\$]*?)\$/g, (match, p1) => {
+              return `<span class="math-raw inline">$${p1}$</span>`;
+            });
+        if (isStreaming) {
+          const preservedContent = content
+              .replace(/\$\$(.*?)\$\$/gs, '<span class="math-raw">$$$1$$</span>')
+              .replace(/\\\((.*?)\\\)/gs, '<span class="math-raw">\\($1\\)</span>');
+          // 流式响应时直接显示原始内容，但保留基本格式处理
+          return [{
+            type: 'html',
+            content: this.sanitizeHtml(md.renderInline(preservedContent))
+          }];
+        }
+        const tokens = md.parse(content || '', {});
+        console.log("解析后的Tokens:", tokens); // 调试输出
+        const blocks = [];
+        let htmlTokens = [];
+
+        for (let i = 0; i < tokens.length; i++) {
+          const token = tokens[i];
+
+          if (token.type === 'fence') {
+            if (htmlTokens.length) {
+              blocks.push({
+                type: 'html',
+                content: this.sanitizeHtml(md.renderer.render(htmlTokens, md.options, {}))
+              });
+              htmlTokens = [];
+            }
+            blocks.push({
+              type: 'code',
+              language: token.info.trim(),
+              code: token.content
+            });
+          } else {
+            htmlTokens.push(token);
+          }
+        }
+
+        if (htmlTokens.length) {
+          blocks.push({
+            type: 'html',
+            content: this.sanitizeHtml(md.renderer.render(htmlTokens, md.options, {}))
+          });
+        }
+
+        // 确保 MathJax 渲染
+        this.$nextTick(() => {
+          this.renderMathJax();
+        });
+
+        return blocks;
+      },
+      // 添加流式内容处理方法
+      processStreamingContent(content) {
+        // 先保护所有数学公式
+        let processed = content
+            .replace(/\\\[([\s\S]*?)\\\]|\\\(([\s\S]*?)\\\)|\$\$([\s\S]*?)\$\$|\$([^\$]*?)\$/g, (match) => {
+              return `<span class="math-protected">${match}</span>`;
+            });
+
+        // 然后处理换行等基本格式
+        processed = processed.replace(/\n/g, '<br>');
+
+        // 最后恢复保护的公式
+        processed = processed.replace(/<span class="math-protected">(.*?)<\/span>/g, (match, p1) => {
+          return p1; // 保留原始公式格式
+        });
+
+        return processed;
+      },
+      // 渲染Markdown内容
+      renderMathJax() {
+        if (!window.MathJax || this.renderingMathJax) return;
+
+        this.renderingMathJax = true;
+        console.log('开始渲染 MathJax');
+
+        // 清除之前的渲染
+        if (window.MathJax.typesetClear) {
+          window.MathJax.typesetClear();
+        }
+
+        // 使用 Promise 链确保顺序执行
+        Promise.resolve()
+            .then(() => {
+              return window.MathJax.typesetPromise()
+                  .catch(err => {
+                    console.error('MathJax 第一次渲染失败:', err);
+                    // 延迟后重试一次
+                    return new Promise(resolve => setTimeout(resolve, 500))
+                        .then(() => window.MathJax.typesetPromise());
+                  });
+            })
+            .then(() => {
+              console.log('MathJax 渲染完成');
+            })
+            .catch(err => {
+              console.error('MathJax 最终渲染失败:', err);
+            })
+            .finally(() => {
+              this.renderingMathJax = false;
+            });
+      },
+      sanitizeHtml(html) {
+        return DOMPurify.sanitize(html, {
+          ADD_TAGS: ['math', 'mrow', 'mi', 'mo', 'mn', 'msup', 'msub', 'mfrac', 'mtable', 'mtr', 'mtd', 'mjx-container', 'mjx-assistive-mml'],
+          ADD_ATTR: ['display', 'mathbackground', 'mathcolor', 'mathsize', 'data-mjx-texclass', 'jax', 'chtml', 'data-mjx-math', 'aria-hidden'],
+          ALLOW_DATA_ATTR: true,
+          FORBID_ATTR: ['style', 'on*'],
+          ALLOW_UNKNOWN_PROTOCOLS: true  // 允许 MathJax 的特殊协议
+        });
+      },
+      handleSendMessage() {
+        if (this.isWaitingForResponse) {
+          // 如果正在等待回复，显示提示
+          this.$emit('show-error', '请等待当前回复完成后再发送新消息');
+          return;
+        }
+
+        if (this.inputMessage.trim() || this.previewFiles.length > 0) {
+          this.isWaitingForResponse = true; // 设置等待状态
+          // 准备发送的数据
+          const formData = new FormData();
+          formData.append('message', this.inputMessage);
+
+          // 添加文件
+          this.previewFiles.forEach((file, index) => {
+            formData.append(`file${index}`, file);
+          });
+
+          // 发送消息事件
+          this.$emit('send-message', formData);
+
+          // 清空预览文件
+          this.previewFiles = [];
+        }
+      },
+      scrollToBottom() {
+        if (this.$refs.chatContainer) {
+          this.$refs.chatContainer.scrollTop = this.$refs.chatContainer.scrollHeight;
+        }
+        //冲突解决6
+        this.$nextTick(() => {
+              const container = this.$refs.chatContainer;
+              if (container) {
+                // 使用scrollTo确保平滑滚动
+                container.scrollTo({
+                  top: container.scrollHeight,
+                  behavior: 'smooth'
+                });
+
+                // 设置一个延时，确保在内容完全加载后再次滚动
+                setTimeout(() => {
+                  container.scrollTo({
+                    top: container.scrollHeight,
+                    behavior: 'smooth'
+                  });
+                }, 100);
+              }
+                const inputContainer = this.$refs.inputContainer;
+                if (container && inputContainer) {
+                  // 计算输入框的实际高度
+                  const inputHeight = inputContainer.offsetHeight;
+                  // 设置CSS变量
+                  document.documentElement.style.setProperty('--input-height', `${inputHeight}px`);
+
+                  // 滚动到底部
+                  container.scrollTo({
+                    top: container.scrollHeight,
+                    behavior: 'smooth'
+                  });
+                }
+              });
+            },
+            handleTerminateConversation() {
+          this.$emit('terminate-conversation');
+        },
+        getFileIcon(fileType) {
+          const icons = {
+            'text/plain': 'fa-file-alt',
+            'application/pdf': 'fa-file-pdf',
+            'application/msword': 'fa-file-word',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'fa-file-word',
+            'application/vnd.ms-excel': 'fa-file-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'fa-file-excel',
+            'application/vnd.ms-powerpoint': 'fa-file-powerpoint',
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'fa-file-powerpoint',
+            'application/zip': 'fa-file-archive',
+            'application/x-rar-compressed': 'fa-file-archive',
+            'image/jpeg': 'fa-file-image',
+            'image/png': 'fa-file-image',
+            'image/gif': 'fa-file-image'
+          };
+          return icons[fileType] || 'fa-file';
+        },
+        async handleFileUpload(event) {
+          const files = Array.from(event.target.files);
+          for (const file of files) {
+            if (!this.allowedFileTypes.includes(file.type)) {
+              this.$emit('show-error', `不支持的文件类型: ${file.type}`);
+              continue;
+            }
+            if (file.size > this.maxFileSize) {
+              this.$emit('show-error', `文件大小超过限制: ${file.name}`);
+              continue;
+            }
+
+            if (file.type.startsWith('image/')) {
+              const preview = await this.createImagePreview(file);
+              this.previewFiles.push({ ...file, preview });
+            } else {
+              this.previewFiles.push(file);
+            }
+          }
+          event.target.value = ''; // 清空input，允许重复选择相同文件
+        },
+        async handleImageUpload(event) {
+          const files = Array.from(event.target.files);
+          for (const file of files) {
+            if (!file.type.startsWith('image/')) {
+              this.$emit('show-error', `请选择图片文件: ${file.name}`);
+              continue;
+            }
+            if (file.size > this.maxFileSize) {
+              this.$emit('show-error', `图片大小超过限制: ${file.name}`);
+              continue;
+            }
+
+            const preview = await this.createImagePreview(file);
+            this.previewFiles.push({ ...file, preview });
+          }
+          event.target.value = '';
+        },
+        createImagePreview(file) {
+          return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.readAsDataURL(file);
+          });
+        },
+        removePreview(index) {
+          this.previewFiles.splice(index, 1);
+        },
+        handleCodeUpload() {
+          // 触发代码上传事件
+          this.$emit('upload-code');
+        },
+        async handleRecording() {
+          if (!this.isRecording) {
+            try {
+              // 开始录音
+              this.isRecording = true;
+              this.$emit('start-recording');
+            } catch (error) {
+              this.$emit('show-error', '无法启动录音功能');
+              this.isRecording = false;
+            }
+          } else {
+            // 停止录音
+            this.isRecording = false;
+            this.$emit('stop-recording');
+          }
+        },
+        // 检查是否包含思考内容
+        hasReasoningContent(content) {
+          return content.includes('[REASONING_START]') && content.includes('[REASONING_END]');
+        },
+
+        // 获取思考内容
+        getReasoningContent(content) {
+          const startIndex = content.indexOf('[REASONING_START]') + '[REASONING_START]'.length;
+          const endIndex = content.indexOf('[REASONING_END]');
+          if (startIndex === -1 || endIndex === -1) return '';
+
+          const reasoningContent = content.substring(startIndex, endIndex).trim();
+          // 移除可能存在的标签
+          return DOMPurify.sanitize(marked.parse(reasoningContent.replace(/\[REASONING_START\]|\[REASONING_END\]/g, '')));
+        },
+
+        // 获取最终回答内容
+        getAnswerContent(content) {
+          const endIndex = content.indexOf('[REASONING_END]');
+          if (endIndex === -1) return DOMPurify.sanitize(marked.parse(content));
+
+          const answerContent = content.substring(endIndex + '[REASONING_END]'.length).trim();
+          // 移除可能存在的标签
+          return DOMPurify.sanitize(marked.parse(answerContent.replace(/\[REASONING_START\]|\[REASONING_END\]/g, '')));
+        }
+      },
+      watch: {
+        messages: {
+          handler(newVal, oldVal) {
+            // 使用防抖防止频繁更新
+            clearTimeout(this.updateTimeout);
+            this.updateTimeout = setTimeout(() => {
+              this.$nextTick(() => {
+                this.scrollToBottom();
+
+                // 只有当有新消息时才渲染 MathJax
+                if (newVal.length !== oldVal?.length ||
+                    JSON.stringify(newVal[newVal.length-1]) !==
+                    JSON.stringify(oldVal[oldVal.length-1])) {
+                  this.renderMathJax();
+                }
+              });
+            }, 50);
+            // 检查是否有消息正在流式加载
+            this.isStreaming = this.messages.some(msg => msg.isStreaming);
+            // 如果没有消息在流式加载，重置等待状态
+            if (!this.isStreaming) {
+              this.isWaitingForResponse = false;
+            }
+          },
+          deep: true,
+          immediate:true
+        }
+      },
+      mounted() {
+        // 全局错误处理
+        window.addEventListener('error', (event) => {
+          if (event.message.includes('Maximum call stack size exceeded')) {
+            console.error('检测到调用栈溢出，正在恢复...');
+            this.recoverFromStackOverflow();
+            event.preventDefault();
+          }
+        });
+      },
+      updated() {
+        console.log("DOM更新完成");
       }
-    });
-  },
-  updated() {
-    console.log("DOM更新完成");
-  }
-};
+    };
 </script>
 
 <style>
@@ -530,6 +774,8 @@ export default {
 .message {
   display: flex;
   margin-bottom: 20px;
+/*冲突解决7*/
+  max-width: 70%;
   max-width: 85%;
   width: 100%;
   animation: fade-in 0.3s ease-in-out;
@@ -976,5 +1222,476 @@ mjx-container[jax="CHTML"][display="true"] {
   /* 公式渲染完成后的样式 */
   background-color: transparent;
   padding: 0;
+}
+
+.preview-container {
+  padding: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  background: #f8f9fa;
+  border-top: 1px solid #e9ecef;
+}
+
+.preview-item {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.preview-content {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.preview-file {
+  padding: 10px;
+  text-align: center;
+}
+
+.preview-file i {
+  font-size: 24px;
+  color: var(--primary-color);
+  margin-bottom: 5px;
+}
+
+.file-name {
+  font-size: 12px;
+  color: var(--mid-gray);
+  word-break: break-all;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.remove-preview {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.5);
+  color: white;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  padding: 0;
+}
+
+.remove-preview:hover {
+  background: rgba(0,0,0,0.7);
+}
+
+.input-tool.recording {
+  background: #ff4d4f;
+  color: white;
+}
+
+.input-tool.recording:hover {
+  background: #ff7875;
+}
+
+/* 优化输入框样式 */
+textarea {
+  min-height: 60px;
+  max-height: 200px;
+  resize: none;
+  padding: 12px;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.5;
+  transition: all 0.3s ease;
+}
+
+textarea:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.1);
+  outline: none;
+}
+
+textarea:disabled {
+  background-color: #f5f5f5;
+  cursor: not-allowed;
+}
+
+/* 思考框样式 */
+.message.thinking {
+  align-items: flex-start;
+}
+
+.message.thinking .message-content {
+  background: linear-gradient(135deg, #f6f8fa 0%, #e9ecef 100%);
+  border: 1px solid #e1e4e8;
+  border-radius: 12px;
+  padding: 15px 20px;
+  position: relative;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.message.thinking .message-content::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 15px;
+  width: 0;
+  height: 0;
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
+  border-right: 8px solid #e1e4e8;
+}
+
+.message.thinking .message-content::after {
+  content: '';
+  position: absolute;
+  left: -7px;
+  top: 15px;
+  width: 0;
+  height: 0;
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
+  border-right: 8px solid #f6f8fa;
+}
+
+/* 回答框样式 */
+.message.answer {
+  align-items: flex-end;
+}
+
+.message.answer .message-content {
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+  color: white;
+  border-radius: 12px;
+  padding: 15px 20px;
+  position: relative;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.message.answer .message-content::before {
+  content: '';
+  position: absolute;
+  right: -8px;
+  top: 15px;
+  width: 0;
+  height: 0;
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
+  border-left: 8px solid var(--secondary-color);
+}
+
+.message.answer .message-content::after {
+  content: '';
+  position: absolute;
+  right: -7px;
+  top: 15px;
+  width: 0;
+  height: 0;
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
+  border-left: 8px solid var(--primary-color);
+}
+
+/* 思考框动画 */
+@keyframes thinking-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+  100% { transform: scale(1); }
+}
+
+.message.thinking .message-content {
+  animation: thinking-pulse 2s infinite ease-in-out;
+}
+
+/* 回答框动画 */
+@keyframes answer-slide {
+  0% { transform: translateX(20px); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+
+.message.answer .message-content {
+  animation: answer-slide 0.3s ease-out;
+}
+
+/* 思考框内容样式 */
+.message.thinking .message-content p {
+  margin: 0;
+  color: #586069;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* 回答框内容样式 */
+.message.answer .message-content p {
+  margin: 0;
+  color: white;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* 思考框和回答框的代码块样式 */
+.message.thinking .message-content pre,
+.message.answer .message-content pre {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 6px;
+  padding: 12px;
+  margin: 10px 0;
+  overflow-x: auto;
+}
+
+.message.answer .message-content pre {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* 思考框和回答框的列表样式 */
+.message.thinking .message-content ul,
+.message.thinking .message-content ol,
+.message.answer .message-content ul,
+.message.answer .message-content ol {
+  margin: 10px 0;
+  padding-left: 20px;
+}
+
+.message.thinking .message-content li,
+.message.answer .message-content li {
+  margin: 5px 0;
+}
+
+/* 思考框和回答框的引用样式 */
+.message.thinking .message-content blockquote,
+.message.answer .message-content blockquote {
+  border-left: 4px solid #e1e4e8;
+  margin: 10px 0;
+  padding: 0 15px;
+  color: #586069;
+}
+
+.message.answer .message-content blockquote {
+  border-left-color: rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* 思考框和回答框的表格样式 */
+.message.thinking .message-content table,
+.message.answer .message-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 10px 0;
+}
+
+.message.thinking .message-content th,
+.message.thinking .message-content td,
+.message.answer .message-content th,
+.message.answer .message-content td {
+  border: 1px solid #e1e4e8;
+  padding: 8px;
+  text-align: left;
+}
+
+.message.answer .message-content th,
+.message.answer .message-content td {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* 思考框和回答框的链接样式 */
+.message.thinking .message-content a,
+.message.answer .message-content a {
+  color: var(--primary-color);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.2s;
+}
+
+.message.answer .message-content a {
+  color: white;
+  border-bottom-color: rgba(255, 255, 255, 0.3);
+}
+
+.message.thinking .message-content a:hover,
+.message.answer .message-content a:hover {
+  border-bottom-color: currentColor;
+}
+
+/* 思考框和回答框的图片样式 */
+.message.thinking .message-content img,
+.message.answer .message-content img {
+  max-width: 100%;
+  border-radius: 6px;
+  margin: 10px 0;
+}
+
+/* 思考框和回答框的标题样式 */
+.message.thinking .message-content h1,
+.message.thinking .message-content h2,
+.message.thinking .message-content h3,
+.message.thinking .message-content h4,
+.message.thinking .message-content h5,
+.message.thinking .message-content h6,
+.message.answer .message-content h1,
+.message.answer .message-content h2,
+.message.answer .message-content h3,
+.message.answer .message-content h4,
+.message.answer .message-content h5,
+.message.answer .message-content h6 {
+  margin: 15px 0 10px;
+  color: inherit;
+}
+
+/* 思考框和回答框的分割线样式 */
+.message.thinking .message-content hr,
+.message.answer .message-content hr {
+  border: none;
+  border-top: 1px solid #e1e4e8;
+  margin: 15px 0;
+}
+
+.message.answer .message-content hr {
+  border-top-color: rgba(255, 255, 255, 0.2);
+}
+
+/* 思考内容样式 */
+.thinking-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.reasoning-section {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid #e9ecef;
+}
+
+.reasoning-header {
+  font-weight: 600;
+  color: #495057;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.reasoning-header::before {
+  content: '💭';
+  font-size: 1rem;
+}
+
+.reasoning-body {
+  color: #495057;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.answer-section {
+  color: inherit;
+  padding-left: 1rem;
+}
+
+/* 思考内容中的代码块样式 */
+.reasoning-body pre {
+  background: #f1f3f5;
+  border-radius: 6px;
+  padding: 1rem;
+  margin: 0.5rem 0;
+  overflow-x: auto;
+}
+
+.reasoning-body code {
+  font-family: 'Fira Code', monospace;
+  font-size: 0.9rem;
+}
+
+/* 思考内容中的列表样式 */
+.reasoning-body ul,
+.reasoning-body ol {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+}
+
+.reasoning-body li {
+  margin: 0.25rem 0;
+}
+
+/* 思考内容中的引用样式 */
+.reasoning-body blockquote {
+  border-left: 4px solid #dee2e6;
+  margin: 0.5rem 0;
+  padding: 0.5rem 1rem;
+  color: #6c757d;
+  background: #f8f9fa;
+}
+
+/* 思考内容中的表格样式 */
+.reasoning-body table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5rem 0;
+}
+
+.reasoning-body th,
+.reasoning-body td {
+  border: 1px solid #dee2e6;
+  padding: 0.5rem;
+  text-align: left;
+}
+
+.reasoning-body th {
+  background: #f8f9fa;
+  font-weight: 600;
+}
+
+/* 思考内容中的链接样式 */
+.reasoning-body a {
+  color: #22863a;
+  text-decoration: none;
+}
+
+.reasoning-body a:hover {
+  text-decoration: underline;
+}
+
+/* 思考内容中的图片样式 */
+.reasoning-body img {
+  max-width: 100%;
+  border-radius: 6px;
+  margin: 0.5rem 0;
+}
+
+/* 思考内容中的标题样式 */
+.reasoning-body h1,
+.reasoning-body h2,
+.reasoning-body h3,
+.reasoning-body h4,
+.reasoning-body h5,
+.reasoning-body h6 {
+  margin: 1rem 0 0.5rem;
+  color: #212529;
+}
+
+/* 思考内容中的分割线样式 */
+.reasoning-body hr {
+  border: none;
+  border-top: 1px solid #dee2e6;
+  margin: 1rem 0;
 }
 </style>
