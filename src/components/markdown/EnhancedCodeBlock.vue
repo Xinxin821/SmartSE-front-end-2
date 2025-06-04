@@ -7,6 +7,17 @@
 
       <!-- 操作按钮组 -->
       <div class="code-actions">
+        <!-- PlantUML 渲染切换按钮 -->
+        <button
+            v-if="isPlantUML"
+            class="render-toggle-button"
+            @click="toggleRenderMode"
+            :title="renderMode === 'code' ? '查看渲染图' : '查看源代码'"
+        >
+          <i class="fas" :class="renderMode === 'code' ? 'fa-image' : 'fa-code'"></i>
+          <span>{{ renderMode === 'code' ? '渲染' : '源码' }}</span>
+        </button>
+
         <!-- 复制按钮 -->
         <button
             class="copy-button"
@@ -40,14 +51,12 @@
     </div>
 
     <!-- 代码内容区域 -->
-    <div class="code-content-wrapper">
+    <div v-if="!isPlantUML || renderMode === 'code'" class="code-content-wrapper">
       <!-- 行号列 -->
       <div
           v-if="showLineNumbers"
           class="line-numbers"
           ref="lineNumbers">
-<!--          :style="{ height: codeContentHeight }"-->
-
         <span
             v-for="n in lineCount"
             :key="n"
@@ -60,7 +69,6 @@
           ref="preElement"
           :style="{
           'margin-left': showLineNumbers ? lineNumbersWidth + 'px' : '0',
-          // 'height': codeContentHeight
         }"
       >
         <code
@@ -71,12 +79,26 @@
         ></code>
       </pre>
     </div>
+
+    <!-- PlantUML 渲染图 -->
+    <div v-if="isPlantUML && renderMode === 'rendered'" class="plantuml-render">
+      <img :src="plantUMLImageUrl" alt="PlantUML Diagram" class="plantuml-image" @load="onImageLoad" @error="onImageError">
+      <div v-if="imageLoading" class="loading-overlay">
+        <i class="fas fa-spinner fa-spin"></i>
+        <span>正在渲染图表...</span>
+      </div>
+      <div v-if="imageError" class="error-overlay">
+        <i class="fas fa-exclamation-triangle"></i>
+        <span>渲染失败</span>
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
 import hljs from 'highlight.js/lib/core'
 import 'highlight.js/styles/github.css'
+import { encode } from 'plantuml-encoder';
 
 // 按需注册语言（根据项目需要增减）
 import javascript from 'highlight.js/lib/languages/javascript'
@@ -139,11 +161,25 @@ export default {
       copyTimeout: null,
       showLineNumbers: this.lineNumbers,
       lineNumbersWidth: 0,
-      codeContentHeight: 'auto',
-      lineCount: 0
+      lineCount: 0,
+      renderMode: 'code', // 'code' 或 'rendered'
+      imageLoading: false,
+      imageError: false
     }
   },
   computed: {
+    // 判断是否是 PlantUML 代码
+    isPlantUML() {
+      return this.language.toLowerCase() === 'plantuml';
+    },
+
+    // PlantUML 图片 URL
+    plantUMLImageUrl() {
+      if (!this.isPlantUML) return '';
+      const encoded = encode(this.code.trim());
+      return `https://www.plantuml.com/plantuml/svg/${encoded}`;
+    },
+
     // 格式化后的语言显示名称
     formattedLanguage() {
       return this.language ? this.language.toUpperCase() : 'TEXT';
@@ -186,7 +222,6 @@ export default {
       immediate: true,
       handler() {
         this.$nextTick(() => {
-          /*this.calculateLineNumbers()*/
           this.updateLineNumbersWidth()
         })
       }
@@ -202,13 +237,8 @@ export default {
     }
   },
   mounted() {
-    /*this.calculateLineNumbers()*/
     this.updateLineNumbersWidth()
-
-    // 监听窗口变化调整行号宽度
     window.addEventListener('resize', this.handleResize)
-
-    // 初始化高亮行
     this.highlightSpecificLines()
   },
   beforeUnmount() {
@@ -216,6 +246,29 @@ export default {
     window.removeEventListener('resize', this.handleResize)
   },
   methods: {
+    // 切换渲染模式
+    toggleRenderMode() {
+      if (this.renderMode === 'code') {
+        this.renderMode = 'rendered';
+        this.imageLoading = true;
+        this.imageError = false;
+      } else {
+        this.renderMode = 'code';
+      }
+    },
+
+    // 图片加载完成
+    onImageLoad() {
+      this.imageLoading = false;
+      this.imageError = false;
+    },
+
+    // 图片加载失败
+    onImageError() {
+      this.imageLoading = false;
+      this.imageError = true;
+    },
+
     // 复制代码
     async copyCode() {
       try {
@@ -269,23 +322,6 @@ export default {
     toggleLineNumbers() {
       this.showLineNumbers = !this.showLineNumbers
     },
-
-    // 计算行号
-  /*calculateLineNumbers() {
-      if (!this.code) {
-        this.lineCount = 0
-        return
-      }
-
-      // 计算代码行数
-      const lines = this.code.split('\n')
-      this.lineCount = lines.length
-
-      // 更新代码区域高度（保持行号与代码同步滚动）
-      if (this.$refs.codeElement) {
-        this.codeContentHeight = this.$refs.codeElement.offsetHeight + 'px'
-      }
-    },*/
 
     // 更新行号列宽度
     updateLineNumbersWidth() {
@@ -381,7 +417,7 @@ export default {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   background-color: #f6f8fa;
   transition: all 0.3s ease;
-  overflow-x: auto; /* 横向滚动 */
+  overflow-x: auto;
   overflow-y: hidden;
 }
 
@@ -417,7 +453,8 @@ export default {
 
 .copy-button,
 .download-button,
-.line-numbers-toggle {
+.line-numbers-toggle,
+.render-toggle-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -440,19 +477,56 @@ export default {
 
 .copy-button:hover,
 .download-button:hover,
-.line-numbers-toggle:hover {
+.line-numbers-toggle:hover,
+.render-toggle-button:hover {
   color: #0366d6;
   background-color: rgba(3, 102, 214, 0.1);
+}
+
+/* PlantUML 渲染图样式 */
+.plantuml-render {
+  position: relative;
+  padding: 16px;
+  background-color: white;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100px;
+}
+
+.plantuml-image {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+.loading-overlay,
+.error-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background-color: rgba(255, 255, 255, 0.8);
+  color: #6a737d;
+  gap: 8px;
+}
+
+.error-overlay {
+  color: #d73a49;
 }
 
 /* 代码内容区域 */
 .code-content-wrapper {
   position: relative;
   display: flex;
-  overflow-x: auto; /* 仅横向滚动 */
-  overflow-y: hidden; /* 禁用纵向滚动 */
-  max-height: none; /* 移除固定高度 */
-  width: 100%; /* 确保宽度填满 */
+  overflow-x: auto;
+  overflow-y: hidden;
+  width: 100%;
 }
 
 /* 行号样式 */
@@ -516,6 +590,10 @@ code {
   }
 
   pre {
+    padding: 12px;
+  }
+
+  .plantuml-render {
     padding: 12px;
   }
 }

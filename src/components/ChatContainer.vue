@@ -169,6 +169,7 @@
 
 
 <script>
+import { encode } from 'plantuml-encoder';
 import { ElMessage } from 'element-plus';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
@@ -282,6 +283,8 @@ export default {
           content: this.sanitizeHtml(md.renderInline(preservedContent))
         }];
       }
+      // 先处理 PlantUML
+
       const tokens = md.parse(content || '', {});
       console.log("解析后的Tokens:", tokens); // 调试输出
       const blocks = [];
@@ -323,7 +326,7 @@ export default {
     },
     // 添加流式内容处理方法
     processStreamingContent(content) {
-      // 先保护所有数学公式
+      // 先处理 PlantUML
       let processed = content
           .replace(/\\\[([\s\S]*?)\\\]|\\\(([\s\S]*?)\\\)|\$\$([\s\S]*?)\$\$|\$([^\$]*?)\$/g, (match) => {
             return `<span class="math-protected">${match}</span>`;
@@ -1639,5 +1642,22 @@ mjx-container[jax="CHTML"][display="true"] {
   border: none;
   border-top: 1px solid #dee2e6;
   margin: 1rem 0;
+}
+/* PlantUML 图表样式 */
+.plantuml-diagram {
+  margin: 1em 0;
+  padding: 1em;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.plantuml-diagram img {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  height: auto;
 }
 </style>
