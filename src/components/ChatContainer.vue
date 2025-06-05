@@ -132,9 +132,6 @@
         <button class="input-tool" title="上传代码" @click="handleCodeUpload">
           <i class="fas fa-code"></i>
         </button>
-        <button class="input-tool" title="录音" @click="handleRecording" :class="{ 'recording': isRecording }">
-          <i class="fas fa-microphone"></i>
-        </button>
       </div>
 
       <textarea
@@ -391,23 +388,48 @@ export default {
         return;
       }
 
-      if (this.inputMessage.trim() || this.previewFiles.length > 0) {
-        this.isWaitingForResponse = true; // 设置等待状态
-        // 准备发送的数据
-        const formData = new FormData();
-        formData.append('message', this.inputMessage);
+      // 更合理的发送条件判断
+      const hasContent = this.inputMessage.trim() || this.previewFiles.length > 0;
+      if (!hasContent) return;
 
-        // 添加文件
-        this.previewFiles.forEach((file, index) => {
-          formData.append(`file${index}`, file);
+      this.isWaitingForResponse = true;
+
+      // 准备发送的数据
+      const formData = new FormData();
+      formData.append('message', this.inputMessage);
+
+      // 添加文件 - 确保添加原始文件对象
+      if (this.previewFiles.length > 0) {
+        console.log('准备上传文件数量:', this.previewFiles.length);
+
+        this.previewFiles.forEach((fileObj, index) => {
+          // 从对象中获取原始文件
+          if (fileObj.file instanceof File) {
+            // 根据文件类型使用正确的字段名
+            const fieldName = fileObj.file.type.startsWith('image/') ? 'image' : 'file';
+            formData.append(fieldName, fileObj.file);
+            console.log(`添加${fieldName}:`, fileObj.file.name, fileObj.file.type, fileObj.file.size);
+          } else {
+            console.error('无效的文件对象:', fileObj);
+          }
         });
 
-        // 发送消息事件
-        this.$emit('send-message', formData);
-
-        // 清空预览文件
-        this.previewFiles = [];
+        // 调试信息：打印FormData内容
+        console.log('FormData内容:');
+        for (const [key, value] of formData.entries()) {
+          if (value instanceof File) {
+            console.log(`${key}: 文件 (${value.name}, ${value.type}, ${value.size} 字节)`);
+          } else {
+            console.log(`${key}: ${value}`);
+          }
+        }
       }
+
+      // 发送消息事件
+      this.$emit('send-message', formData);
+
+      // 清空预览文件
+      this.previewFiles = [];
     },
     scrollToBottom() {
       if (this.$refs.chatContainer) {
@@ -468,16 +490,18 @@ export default {
           continue;
         }
 
-        if (file.type.startsWith('image/')) {
-          const preview = await this.createImagePreview(file);
-          this.previewFiles.push({ ...file, preview });
-        } else {
-          this.previewFiles.push(file);
-        }
+        // 只添加一次，保存完整信息
+        this.previewFiles.push({
+          file: file,  // 保存原始 File 对象
+          name: file.name,
+          type: file.type,
+          size: this.formatFileSize(file.size),
+          preview: file.type.startsWith('image/') ? await this.createImagePreview(file) : null
+        });
       }
       event.target.value = ''; // 清空input，允许重复选择相同文件
     },
-    // 修改你的handleImageUpload方法
+
     async handleImageUpload(event) {
       const files = Array.from(event.target.files);
       for (const file of files) {
@@ -493,12 +517,13 @@ export default {
         try {
           // 创建预览
           const preview = await this.createImagePreview(file);
-          // 添加到预览文件数组，确保包含type、name和preview属性
+          // 只添加一次，包含完整信息
           this.previewFiles.push({
-            ...file,
-            preview,
+            file: file,  // 保存原始 File 对象
             name: file.name,
-            type: file.type
+            type: file.type,
+            size: this.formatFileSize(file.size),
+            preview: preview
           });
           console.log("添加图片到预览:", file.name, preview);
         } catch (err) {
@@ -511,10 +536,23 @@ export default {
     createImagePreview(file) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target.result);
-        reader.onerror = (e) => reject(e);
+        reader.onload = (e) => {
+          resolve(e.target.result); // 返回 base64 图片数据
+        };
+        reader.onerror = (e) => {
+          reject(e);
+        };
         reader.readAsDataURL(file);
       });
+    },
+    formatFileSize(bytes) {
+      if (bytes === 0) return '0 B';
+
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     },
     removePreview(index) {
       this.previewFiles.splice(index, 1);
@@ -522,22 +560,6 @@ export default {
     handleCodeUpload() {
       // 触发代码上传事件
       this.$emit('upload-code');
-    },
-    async handleRecording() {
-      if (!this.isRecording) {
-        try {
-          // 开始录音
-          this.isRecording = true;
-          this.$emit('start-recording');
-        } catch (error) {
-          this.$emit('show-error', '无法启动录音功能');
-          this.isRecording = false;
-        }
-      } else {
-        // 停止录音
-        this.isRecording = false;
-        this.$emit('stop-recording');
-      }
     },
     // 检查是否包含思考内容
     hasReasoningContent(content) {

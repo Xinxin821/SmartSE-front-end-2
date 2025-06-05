@@ -830,107 +830,199 @@ export default {
         return false; // 返回失败标志
       }
     },
-    async sendMessage() {
-      if (this.inputMessage.trim() === '') return;
-
-//冲突解决处8
-      let currentSessionId = null;
-      if (this.activeHistoryIndex >= 0 && this.chatHistories[this.activeHistoryIndex]) {
-        currentSessionId = this.chatHistories[this.activeHistoryIndex].sessionId;
-      }
-
-      const userMessage = this.inputMessage;
-      this.messages.push({
-        type: 'user',
-        content: userMessage,
-        time: this.getCurrentTime()
-      });
-      const botMessage = {
-        type: 'bot',
-        content: '',
-        time: this.getCurrentTime(),
-        agent: '智能助手',
-        isStreaming: true
-      };
-      this.messages.push(botMessage);
-
-      this.inputMessage = ''; // 清空输入框
-      this.scrollToBottom();
-
+    async sendMessage(formData) {
       try {
+        // 获取消息内容和文件
+        const message = formData.get('message') || '';
+        const files = [];
+
+        // 检查是否有文件
+        for (const [key, value] of formData.entries()) {
+          if (value instanceof File) {
+            console.log(`找到文件: ${key}, 文件名: ${value.name}, 类型: ${value.type}, 大小: ${value.size}字节`);
+            files.push(value);
+          }
+        }
+
+        const hasFiles = files.length > 0;
+
+        // 验证是否有消息内容或文件
+        if (!message.trim() && !hasFiles) {
+          console.log('没有消息或文件，不发送请求');
+          return;
+        }
+
+        // 获取当前会话ID
+        let currentSessionId = null;
+        if (this.activeHistoryIndex >= 0 && this.chatHistories[this.activeHistoryIndex]) {
+          currentSessionId = this.chatHistories[this.activeHistoryIndex].sessionId;
+        }
+
+        // 添加用户消息到界面
+        this.messages.push({
+          type: 'user',
+          content: message.trim() || (hasFiles ? '发送了文件' : ''),
+          time: this.getCurrentTime(),
+          files: hasFiles ? files.map(file => ({
+            name: file.name,
+            size: this.formatFileSize(file.size),
+            type: file.type,
+            url: URL.createObjectURL(file)
+          })) : []
+        });
+
+        // 添加临时机器人消息
+        const botMessage = {
+          type: 'bot',
+          content: '',
+          time: this.getCurrentTime(),
+          agent: '智能助手',
+          isStreaming: true
+        };
+        this.messages.push(botMessage);
+
+        this.inputMessage = ''; // 清空输入框
+        this.scrollToBottom();
+
+        // 准备发送到后端的数据
+        const apiFormData = new FormData();
+        apiFormData.append('message', message);
+        apiFormData.append('userId', localStorage.getItem("userId"));
+        apiFormData.append('sessionId', currentSessionId);
+
+        // 添加文件 - 检查类型并正确命名参数
+        if (hasFiles) {
+          for (const file of files) {
+            if (file.type.startsWith('image/')) {
+              console.log(`添加图片到请求: ${file.name}`);
+              apiFormData.append('image', file);
+            } else {
+              console.log(`添加文件到请求: ${file.name}`);
+              apiFormData.append('file', file);
+            }
+          }
+        }
+
+        // 打印发送的表单数据内容（调试用）
+        console.log('准备发送请求，表单数据包含:');
+        for (const [key, value] of apiFormData.entries()) {
+          if (value instanceof File) {
+            console.log(`- ${key}: 文件(${value.name}, ${value.type}, ${value.size}字节)`);
+          } else {
+            console.log(`- ${key}: ${value}`);
+          }
+        }
+
         this.isLoading = true;
-        const userId = localStorage.getItem("userId");
-//冲突解决处9
-        const sessionIdParam = currentSessionId ? `&sessionId=${currentSessionId}` : '';
-        const eventSource = new EventSource(`http://localhost:8080/api/chat/stream_chat?message=${encodeURIComponent(userMessage)}&userId=${userId}&sessionId=${currentSessionId}`);
-        // 处理流式数据
-        eventSource.onmessage = (event) => {
-          if (!event.data) return;
-          if (event.data === "[DONE]") {
-            eventSource.close();
-            this.isLoading = false;
-            // 标记消息流结束
+
+        // 使用fetch发送请求
+        const response = await fetch('http://localhost:8080/api/chat/stream_chat', {
+          method: 'POST',
+          body: apiFormData,
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP错误! 状态码: ${response.status}`);
+        }
+
+        // 处理响应流
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+
+        // 流式处理响应
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const text = decoder.decode(value, { stream: true });
+          // 将接收到的数据按SSE格式拆分
+          const events = text.split('\n\n').filter(line => line.trim());
+
+          for (const eventText of events) {
+            // 检查是否是有效的SSE数据行
+            if (!eventText.includes('data:')) continue;
+
+            // 提取实际内容（处理可能的多重data:前缀）
+            let data = eventText;
+            while (data.includes('data:')) {
+              data = data.substring(data.indexOf('data:') + 5).trim();
+            }
+
+            if (!data) continue; // 跳过空数据
+
+            if (data === "[DONE]") {
+              this.isLoading = false;
+              // 标记消息流结束
+              const lastBotMessage = this.messages[this.messages.length - 1];
+              if (lastBotMessage.type === 'bot') {
+                lastBotMessage.isStreaming = false;
+                lastBotMessage.renderedContent = DOMPurify.sanitize(marked.parse(lastBotMessage.content));
+              }
+              this.$forceUpdate();
+              return;
+            }
+
+            if (data.startsWith("[TITLE]")) {
+              const newTitle = data.substring(7);
+              console.log("收到标题:", newTitle);
+              // 确保有活跃会话
+              if (this.activeHistoryIndex >= 0 && this.chatHistories[this.activeHistoryIndex]) {
+                if (this.currentTopic === this.chatHistories[this.activeHistoryIndex].title) {
+                  this.currentTopic = newTitle;
+                }
+                this.chatHistories[this.activeHistoryIndex].title = newTitle;
+              }
+              continue;
+            }
+
+            // 更新最后一条bot消息内容
             const lastBotMessage = this.messages[this.messages.length - 1];
             if (lastBotMessage.type === 'bot') {
-              lastBotMessage.isStreaming = false;
-              lastBotMessage.renderedContent = DOMPurify.sanitize(marked.parse(lastBotMessage.content));
-            }
-            this.$forceUpdate();
-            return;
-          }
-
-          if (event.data.startsWith("[TITLE]")) {
-            const newTitle = event.data.substring(7);
-            console.log("Received title:", newTitle);
-            // 确保有活跃会话
-            if (this.activeHistoryIndex >= 0 && this.chatHistories[this.activeHistoryIndex]) {
-
-              if (this.currentTopic === this.chatHistories[this.activeHistoryIndex].title) {
-                this.currentTopic = newTitle;
+              lastBotMessage.content += data;
+              // 使用Marked.js渲染Markdown，并确保安全
+              const rawMarkdown = lastBotMessage.content;
+              try {
+                lastBotMessage.renderedContent = DOMPurify.sanitize(marked.parse(rawMarkdown));
+              } catch (e) {
+                console.error("Markdown渲染错误:", e);
+                lastBotMessage.renderedContent = DOMPurify.sanitize(rawMarkdown);
               }
 
-              this.chatHistories[this.activeHistoryIndex].title = newTitle;
-
+              // 重置等待状态
+              if (this.$refs.chatContainer) {
+                this.$refs.chatContainer.isWaitingForResponse = false;
+              }
+              this.$forceUpdate();
+              this.scrollToBottom();
             }
-            eventSource.close();
-            this.isLoading = false;
-            return;
           }
-
-          // 更新最后一条bot消息内容
-          const lastBotMessage = this.messages[this.messages.length - 1];
-          if (lastBotMessage.type === 'bot') {
-            lastBotMessage.content += event.data;
-            // 使用Marked.js渲染Markdown
-            // 在接收消息时，使用DOMPurify清理HTML并渲染 Markdown
-            lastBotMessage.renderedContent = DOMPurify.sanitize(marked.parse(lastBotMessage.content));
-            // 重置等待状态More actions
-            this.$refs.chatContainer.isWaitingForResponse = false;
-            this.$forceUpdate();
-            this.scrollToBottom();
-          }
-        };
-
-        eventSource.onerror = (error) => {
-          console.error("EventSource failed:", error);
-          eventSource.close();
-          this.isLoading = false;
-          // 标记消息流结束
-          const lastBotMessage = this.messages[this.messages.length - 1];
-          if (lastBotMessage.type === 'bot') {
-            lastBotMessage.isStreaming = false;
-          }
-          this.showErrorMessage("连接中断，请重试");
-        };
+        }
       } catch (error) {
         console.error("发送消息失败:", error);
         this.showErrorMessage("发送失败: " + (error.response?.data || error.message));
         // 移除临时的"正在输入"消息
-        this.messages = this.messages.filter(msg => !msg.isLoading);
+        this.messages = this.messages.filter(msg => !msg.isStreamming);
       } finally {
         this.isLoading = false;
         this.scrollToBottom();
       }
+    },
+
+    formatFileSize(bytes) {
+      if (bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    },
+    getFilesFromFormData(formData) {
+      const files = [];
+      for (const [key, value] of formData.entries()) {
+        if (key.startsWith('file') && value instanceof File) {
+          files.push(value);
+        }
+      }
+      return files;
     },
     getCurrentTime() {
       const now = new Date();
