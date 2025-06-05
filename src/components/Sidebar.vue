@@ -36,7 +36,7 @@
             @click="$emit('set-active-menu', 'exercise')"
         >
           <i class="fas fa-tasks"></i>
-          <span style="font-family: 'KaiTi', '楷体', 'STKaiti', serif; font-size: 18px; font-weight: bold; color: #000;">习题解析</span>
+          <span style="font-family: 'KaiTi', '楷体', 'STKaiti', serif; font-size: 18px; font-weight: bold; color: #000;">习题推荐</span>
         </div>
         <!--<div
             class="menu-item"

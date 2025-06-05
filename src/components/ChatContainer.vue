@@ -477,6 +477,7 @@ export default {
       }
       event.target.value = ''; // 清空input，允许重复选择相同文件
     },
+    // 修改你的handleImageUpload方法
     async handleImageUpload(event) {
       const files = Array.from(event.target.files);
       for (const file of files) {
@@ -489,15 +490,29 @@ export default {
           continue;
         }
 
-        const preview = await this.createImagePreview(file);
-        this.previewFiles.push({ ...file, preview });
+        try {
+          // 创建预览
+          const preview = await this.createImagePreview(file);
+          // 添加到预览文件数组，确保包含type、name和preview属性
+          this.previewFiles.push({
+            ...file,
+            preview,
+            name: file.name,
+            type: file.type
+          });
+          console.log("添加图片到预览:", file.name, preview);
+        } catch (err) {
+          console.error("创建图片预览失败:", err);
+          this.$emit('show-error', `无法预览图片: ${file.name}`);
+        }
       }
       event.target.value = '';
     },
     createImagePreview(file) {
-      return new Promise((resolve) => {
+      return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = (e) => reject(e);
         reader.readAsDataURL(file);
       });
     },
