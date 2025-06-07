@@ -29,15 +29,15 @@
           <i class="fas fa-project-diagram"></i>
           <span style="font-family: 'KaiTi', '楷体', 'STKaiti', serif; font-size: 18px; font-weight: bold; color: #000;">知识图谱</span>
         </div>
-        <div
-            class="menu-item"
-            :class="{ 'active': activeMenu === 'exercise' }"
-            data-menu="exercise"
-            @click="$emit('set-active-menu', 'exercise')"
-        >
-          <i class="fas fa-tasks"></i>
-          <span style="font-family: 'KaiTi', '楷体', 'STKaiti', serif; font-size: 18px; font-weight: bold; color: #000;">习题推荐</span>
-        </div>
+<!--        <div-->
+<!--            class="menu-item"-->
+<!--            :class="{ 'active': activeMenu === 'exercise' }"-->
+<!--            data-menu="exercise"-->
+<!--            @click="$emit('set-active-menu', 'exercise')"-->
+<!--        >-->
+<!--          <i class="fas fa-tasks"></i>-->
+<!--          <span style="font-family: 'KaiTi', '楷体', 'STKaiti', serif; font-size: 18px; font-weight: bold; color: #000;">习题推荐</span>-->
+<!--        </div>-->
         <!--<div
             class="menu-item"
             :class="{ 'active': activeMenu === 'resource' }"

@@ -142,9 +142,9 @@
           :disabled="isRecording"
       ></textarea>
 
-<!--      <button class="input-submit" @click="handleSendMessage">-->
-<!--        发送-->
-<!--      </button>-->
+      <!--      <button class="input-submit" @click="handleSendMessage">-->
+      <!--        发送-->
+      <!--      </button>-->
       <button
           v-if="!isStreaming && !isWaitingForResponse"
           class="input-submit"
@@ -158,7 +158,7 @@
           class="input-submit"
           @click="handleWaitingResponse"
       >
-        回复中...
+        🟥
       </button>
     </div>
   </div>
@@ -269,6 +269,10 @@ export default {
       document.removeEventListener('mousemove', this.handleDragMove);
       document.removeEventListener('mouseup', this.handleDragEnd);
     },
+    // 添加renderMarkdown方法作为renderMarkdownBlocks的包装器
+    renderMarkdown(content) {
+      return this.renderMarkdownBlocks(content, false);
+    },
     renderMarkdownBlocks(content, isStreaming = false) {
       if (isStreaming) {
         const preservedContent = content
@@ -323,6 +327,10 @@ export default {
     },
     // 添加流式内容处理方法
     processStreamingContent(content) {
+      // 如果是PlantUML，等待闭合标签
+      if (content.includes('@startuml') && !content.includes('@enduml')) {
+        return `<pre class="plantuml-loading">正在生成PlantUML图表...</pre>`;
+      }
       // 先处理 PlantUML
       let processed = content
           .replace(/\\\[([\s\S]*?)\\\]|\\\(([\s\S]*?)\\\)|\$\$([\s\S]*?)\$\$|\$([^\$]*?)\$/g, (match) => {

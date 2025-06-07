@@ -162,12 +162,16 @@ export default {
       showLineNumbers: this.lineNumbers,
       lineNumbersWidth: 0,
       lineCount: 0,
-      renderMode: 'code', // 'code' 或 'rendered'
+      renderMode: 'rendered', // 'code' 或 'rendered'
       imageLoading: false,
       imageError: false
     }
   },
   computed: {
+    // 检查PlantUML代码是否完整
+    isCompletePlantUML(code) {
+      return code.includes('@startuml') && code.includes('@enduml');
+    },
     // 判断是否是 PlantUML 代码
     isPlantUML() {
       return this.language.toLowerCase() === 'plantuml';
@@ -176,8 +180,22 @@ export default {
     // PlantUML 图片 URL
     plantUMLImageUrl() {
       if (!this.isPlantUML) return '';
-      const encoded = encode(this.code.trim());
-      return `https://www.plantuml.com/plantuml/svg/${encoded}`;
+
+      // 验证PlantUML语法
+      const trimmedCode = this.code.trim();
+      if (!this.validatePlantUML(trimmedCode)) {
+        this.imageError = true;
+        return '';
+      }
+
+      try {
+        const encoded = encode(trimmedCode);
+        return `https://www.plantuml.com/plantuml/svg/${encoded}`;
+      } catch (e) {
+        console.error('PlantUML编码错误:', e);
+        this.imageError = true;
+        return '';
+      }
     },
 
     // 格式化后的语言显示名称
@@ -246,6 +264,13 @@ export default {
     window.removeEventListener('resize', this.handleResize)
   },
   methods: {
+    validatePlantUML(code) {
+      // 基本验证：必须有@startuml和@enduml
+      if (!code.includes('@startuml') || !code.includes('@enduml')) {
+        return false;
+      }
+      return true;
+    },
     // 切换渲染模式
     toggleRenderMode() {
       if (this.renderMode === 'code') {

@@ -211,6 +211,7 @@ export default {
     this.$nextTick(() => {
       this.setupDragHandlers();
     });
+
   },
   updated() {
     this.$nextTick(() => {
@@ -240,6 +241,37 @@ export default {
       try {
         await this.loadUserInfo();
         await this.loadChatHistories();
+
+        // 检查是否有上一次的会话ID
+        const lastSessionId = localStorage.getItem('lastActiveSessionId');
+        if (lastSessionId) {
+          // 查找会话索引
+          const sessionIndex = this.chatHistories.findIndex(
+              session => session.sessionId.toString() === lastSessionId
+          );
+
+          if (sessionIndex !== -1) {
+            // 恢复到上一次的会话
+            this.activeHistoryIndex = sessionIndex;
+            this.currentTopic = this.chatHistories[sessionIndex].title;
+            await this.loadSessionDetails(lastSessionId);
+
+            // 如果需要滚动到底部
+            if (localStorage.getItem('needScrollToBottom') === 'true') {
+              this.$nextTick(() => {
+                this.scrollToBottom();
+                // 清除标记
+                localStorage.removeItem('needScrollToBottom');
+              });
+            }
+          }
+
+          // 清除存储的会话ID
+          localStorage.removeItem('lastActiveSessionId');
+        }
+
+        this.setupDragHandlers();
+        this.setupClickOutsideHandlers();
         this.setupDragHandlers();
         this.setupClickOutsideHandlers();
         this.scrollToBottom();
@@ -755,7 +787,7 @@ export default {
 
         this.activeHistoryIndex = index;
         this.currentTopic = selectedHistory.title || '新会话';
-      // 无论当前在哪个界面，都切换到聊天界面
+        // 无论当前在哪个界面，都切换到聊天界面
         this.activeMenu = 'chat';
 
         // 显示加载中的提示
@@ -830,7 +862,7 @@ export default {
         return false; // 返回失败标志
       }
     },
-    async sendMessage(formData) {
+    sendMessage: async function (formData) {
       try {
         // 获取消息内容和文件
         const message = formData.get('message') || '';
@@ -925,75 +957,99 @@ export default {
           throw new Error(`HTTP错误! 状态码: ${response.status}`);
         }
 
-        // 处理响应流
+        // 在Function.vue中的sendMessage方法中修改流式处理部分
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
 
+// 流式处理响应
+        // 修改 Function.vue 中的 sendMessage 方法中的流式处理部分
         // 流式处理响应
+        let buffer = '';  // Store the ongoing data
+        let plantUmlBuffer = '';  // Store PlantUML-specific data (separate from general content)
+
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
           const text = decoder.decode(value, { stream: true });
-          // 将接收到的数据按SSE格式拆分
-          const events = text.split('\n\n').filter(line => line.trim());
+          buffer += text;  // Append new data to the buffer
 
-          for (const eventText of events) {
-            // 检查是否是有效的SSE数据行
-            if (!eventText.includes('data:')) continue;
+          // Split the buffer into events using '\n\n' as the delimiter
+          const events = buffer.split('\n\n');
+          buffer = events.pop() || '';  // Keep the last incomplete event in the buffer
 
-            // 提取实际内容（处理可能的多重data:前缀）
-            let data = eventText;
-            while (data.includes('data:')) {
-              data = data.substring(data.indexOf('data:') + 5).trim();
-            }
+          for (const eventText of events.filter(line => line.trim())) {
+            if (!eventText.startsWith('data:')) continue;
 
-            if (!data) continue; // 跳过空数据
+            // Extract all 'data:' lines
+            let messageContent = eventText.split('\n')
+                .filter(line => line.startsWith('data:'))
+                .map(line => line.substring(5).trim())
+                .join('\n');
 
-            if (data === "[DONE]") {
+            if (messageContent === "[DONE]") {
               this.isLoading = false;
-              // 标记消息流结束
               const lastBotMessage = this.messages[this.messages.length - 1];
               if (lastBotMessage.type === 'bot') {
                 lastBotMessage.isStreaming = false;
-                lastBotMessage.renderedContent = DOMPurify.sanitize(marked.parse(lastBotMessage.content));
               }
               this.$forceUpdate();
               return;
             }
 
-            if (data.startsWith("[TITLE]")) {
-              const newTitle = data.substring(7);
-              console.log("收到标题:", newTitle);
-              // 确保有活跃会话
-              if (this.activeHistoryIndex >= 0 && this.chatHistories[this.activeHistoryIndex]) {
-                if (this.currentTopic === this.chatHistories[this.activeHistoryIndex].title) {
-                  this.currentTopic = newTitle;
+            // Handle PlantUML content
+            if (messageContent.includes('@startuml') || plantUmlBuffer) {
+              // Append to the PlantUML buffer until we reach the full PlantUML block
+              plantUmlBuffer += messageContent;
+
+              // Check if we have a complete PlantUML block
+              if (plantUmlBuffer.includes('@enduml')) {
+                // Once we have the full PlantUML code, we can process it
+                const lastBotMessage = this.messages[this.messages.length - 1];
+                if (lastBotMessage.type === 'bot') {
+                  lastBotMessage.content += plantUmlBuffer;
+
+                  // Handle Markdown rendering for other message content
+                  if (this.$refs.chatContainer) {
+                    const chatContainer = this.$refs.chatContainer;
+
+                    if (typeof chatContainer.renderMarkdown === 'function') {
+                      lastBotMessage.renderedContent = chatContainer.renderMarkdown(lastBotMessage.content);
+                    } else if (typeof chatContainer.renderMarkdownBlocks === 'function') {
+                      lastBotMessage.renderedContent = chatContainer.renderMarkdownBlocks(lastBotMessage.content);
+                    } else {
+                      lastBotMessage.renderedContent = DOMPurify.sanitize(marked.parse(lastBotMessage.content));
+                    }
+                  } else {
+                    lastBotMessage.renderedContent = DOMPurify.sanitize(marked.parse(lastBotMessage.content));
+                  }
                 }
-                this.chatHistories[this.activeHistoryIndex].title = newTitle;
-              }
-              continue;
-            }
 
-            // 更新最后一条bot消息内容
-            const lastBotMessage = this.messages[this.messages.length - 1];
-            if (lastBotMessage.type === 'bot') {
-              lastBotMessage.content += data;
-              // 使用Marked.js渲染Markdown，并确保安全
-              const rawMarkdown = lastBotMessage.content;
-              try {
-                lastBotMessage.renderedContent = DOMPurify.sanitize(marked.parse(rawMarkdown));
-              } catch (e) {
-                console.error("Markdown渲染错误:", e);
-                lastBotMessage.renderedContent = DOMPurify.sanitize(rawMarkdown);
+                // Reset PlantUML buffer for the next block
+                plantUmlBuffer = '';
+                this.$forceUpdate();
               }
+            } else {
+              // Non-PlantUML data, append it to the last bot message content
+              const lastBotMessage = this.messages[this.messages.length - 1];
+              if (lastBotMessage.type === 'bot') {
+                lastBotMessage.content += messageContent;
 
-              // 重置等待状态
-              if (this.$refs.chatContainer) {
-                this.$refs.chatContainer.isWaitingForResponse = false;
+                if (this.$refs.chatContainer) {
+                  const chatContainer = this.$refs.chatContainer;
+
+                  if (typeof chatContainer.renderMarkdown === 'function') {
+                    lastBotMessage.renderedContent = chatContainer.renderMarkdown(lastBotMessage.content);
+                  } else if (typeof chatContainer.renderMarkdownBlocks === 'function') {
+                    lastBotMessage.renderedContent = chatContainer.renderMarkdownBlocks(lastBotMessage.content);
+                  } else {
+                    lastBotMessage.renderedContent = DOMPurify.sanitize(marked.parse(lastBotMessage.content));
+                  }
+                } else {
+                  lastBotMessage.renderedContent = DOMPurify.sanitize(marked.parse(lastBotMessage.content));
+                }
+                this.$forceUpdate();
               }
-              this.$forceUpdate();
-              this.scrollToBottom();
             }
           }
         }

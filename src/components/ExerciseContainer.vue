@@ -130,12 +130,16 @@
 
   </div>
 </template>
-
 <script>
 export default {
   name: 'IntelligentExerciseRecommendation',
   data() {
     return {
+      questions: [], // 存储解析后的题库
+      searchResults: [],
+      currentAnswer: null,
+      ocrProgress: 0,
+      isProcessing: false,
       searchQuery: '软件测试边界值分析',
       uploadIconClass: 'fas fa-cloud-upload-alt',
       uploadIconColor: '#4a6bff',
@@ -193,6 +197,52 @@ export default {
     }
   },
   methods: {
+    async handleDocxUpload(file) {
+      this.isProcessing = true;
+      try {
+        this.questions = await parseDocx(file);
+        this.$message.success(`题库加载成功，共${this.questions.length}道题目`);
+      } catch (err) {
+        console.error('解析DOCX失败:', err);
+        this.$message.error('题库解析失败，请检查文件格式');
+      } finally {
+        this.isProcessing = false;
+      }
+    },
+
+    async handleImageUpload(imageFile) {
+      if (this.questions.length === 0) {
+        this.$message.warning('请先上传题库文件');
+        return;
+      }
+
+      this.isProcessing = true;
+      this.ocrProgress = 0;
+
+      try {
+        const recognizedText = await recognizeQuestionFromImage(imageFile);
+        this.searchQuery = recognizedText; // 填充到搜索框
+        this.searchQuestion(recognizedText);
+      } catch (err) {
+        console.error('OCR识别失败:', err);
+        this.$message.error('图片识别失败，请尝试清晰的图片');
+      } finally {
+        this.isProcessing = false;
+      }
+    },
+
+    searchQuestion(query) {
+      if (!query.trim()) return;
+
+      const result = searchQuestion(this.questions, query);
+      if (result) {
+        this.currentAnswer = result.answer;
+        this.$message.success('找到匹配答案');
+      } else {
+        this.currentAnswer = '未找到匹配答案';
+        this.$message.warning('未找到匹配答案');
+      }
+    },
     // 搜索习题
     handleSearch() {
       if (!this.searchQuery.trim()) return;
