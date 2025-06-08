@@ -60,6 +60,7 @@
             @upload-file="uploadFile"
             @upload-image="uploadImage"
             @upload-code="uploadCode"
+            @show-code-evaluator="showCodeEvaluator"
             @start-recording="startRecording"
             @update-input="updateInputMessage"
             @show-error="showErrorMessage"
@@ -80,6 +81,13 @@
           v-if="showDeleteDialog"
           @confirm="confirmDelete"
           @cancel="cancelDelete"
+      />
+
+      <!-- 在 Function.vue 的 </div> 标签前添加 -->
+      <CodeEvaluator
+          :visible="showCodeEvaluatorModal"
+          @close="showCodeEvaluatorModal = false"
+          @show-error="showErrorMessage"
       />
     </div>
     <!-- 全局进度条 (固定在右侧) -->
@@ -115,6 +123,7 @@ import KnowledgeGraph from '@/components/KnowledgeGraph.vue';
 import RenameDialog from '@/components/Dialog/RenameDialog.vue';
 import DeleteDialog from '@/components/Dialog/DeleteDialog.vue';
 import ProfileModal from '@/components/Dialog/ProfileModal.vue';
+import CodeEvaluator from '@/components/CodeEvaluator.vue';
 
 export default {
   name: 'FunctionPage',
@@ -125,7 +134,8 @@ export default {
     KnowledgeGraph,
     RenameDialog,
     DeleteDialog,
-    ProfileModal
+    ProfileModal,
+    CodeEvaluator
   },
   computed: {
     activeComponent() {
@@ -160,6 +170,7 @@ export default {
   data() {
     return {
       isSidebarCollapsed: false,
+      showCodeEvaluatorModal: false,
       isMobileMenuOpen: false,
       showUserCard: false,
       activeMenu: 'chat',
@@ -253,6 +264,9 @@ export default {
     },
     updateSessionTitle(value) {
       this.newSessionTitle = value;
+    },
+    showCodeEvaluator() {
+      this.showCodeEvaluatorModal = true;
     },
     async loadUserInfo() {
       try {
@@ -946,6 +960,7 @@ export default {
     },
     uploadCode() {
       // 代码上传逻辑
+      this.showCodeEvaluatorModal = true;
       console.log('上传代码');
     },
     startRecording() {

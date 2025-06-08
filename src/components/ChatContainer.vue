@@ -132,9 +132,6 @@
         <button class="input-tool" title="上传代码" @click="handleCodeUpload">
           <i class="fas fa-code"></i>
         </button>
-        <button class="input-tool" title="录音" @click="handleRecording" :class="{ 'recording': isRecording }">
-          <i class="fas fa-microphone"></i>
-        </button>
       </div>
 
       <textarea
@@ -506,7 +503,7 @@ export default {
     },
     handleCodeUpload() {
       // 触发代码上传事件
-      this.$emit('upload-code');
+      this.$emit('show-code-evaluator');
     },
     async handleRecording() {
       if (!this.isRecording) {
