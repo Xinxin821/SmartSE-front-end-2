@@ -18,7 +18,7 @@
             @click="$emit('set-active-menu', 'chat')"
         >
           <i class="fas fa-comments"></i>
-          <span style="font-family: 'KaiTi', '楷体', 'STKaiti', serif; font-size: 18px; font-weight: bold; color: #000;">智能对话</span>
+          <span>智能对话</span>
         </div>
         <div
             class="menu-item"
@@ -27,7 +27,7 @@
             @click="$emit('set-active-menu', 'knowledge')"
         >
           <i class="fas fa-project-diagram"></i>
-          <span style="font-family: 'KaiTi', '楷体', 'STKaiti', serif; font-size: 18px; font-weight: bold; color: #000;">知识图谱</span>
+          <span>知识图谱</span>
         </div>
         <div
             class="menu-item"
@@ -36,7 +36,7 @@
             @click="$emit('set-active-menu', 'codeQuality')"
         >
           <i class="fas fa-code"></i>
-          <span style="font-family: 'KaiTi', '楷体', 'STKaiti', serif; font-size: 18px; font-weight: bold; color: #000;">代码评估</span>
+          <span>代码评估</span>
         </div>
 
 <!--        <div-->

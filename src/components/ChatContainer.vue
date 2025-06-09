@@ -155,7 +155,7 @@
           class="input-submit"
           @click="handleWaitingResponse"
       >
-        🟥
+        ⬜
       </button>
     </div>
   </div>
