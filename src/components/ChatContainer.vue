@@ -129,9 +129,6 @@
         <button class="input-tool" title="上传图片" @click="$refs.imageInput.click()">
           <i class="fas fa-image"></i>
         </button>
-        <button class="input-tool" title="上传代码" @click="handleCodeUpload">
-          <i class="fas fa-code"></i>
-        </button>
       </div>
 
       <textarea
@@ -564,10 +561,6 @@ export default {
     },
     removePreview(index) {
       this.previewFiles.splice(index, 1);
-    },
-    handleCodeUpload() {
-      // 触发代码上传事件
-      this.$emit('upload-code');
     },
     // 检查是否包含思考内容
     hasReasoningContent(content) {

@@ -66,6 +66,8 @@
         />
       </div>
 
+      <CodeQuality v-if="activeMenu === 'codeQuality'" />
+
       <!-- 重命名对话框 -->
       <RenameDialog
           v-if="showRenameDialog"
@@ -115,6 +117,7 @@ import KnowledgeGraph from '@/components/KnowledgeGraph.vue';
 import RenameDialog from '@/components/Dialog/RenameDialog.vue';
 import DeleteDialog from '@/components/Dialog/DeleteDialog.vue';
 import ProfileModal from '@/components/Dialog/ProfileModal.vue';
+import CodeQuality from '@/components/CodeQuality.vue';
 
 export default {
   name: 'FunctionPage',
@@ -125,7 +128,8 @@ export default {
     KnowledgeGraph,
     RenameDialog,
     DeleteDialog,
-    ProfileModal
+    ProfileModal,
+    CodeQuality
   },
   computed: {
     activeComponent() {
@@ -760,7 +764,6 @@ export default {
         chat: '智能对话',
         knowledge: '知识图谱',
         exercise: '习题解析',
-        resource: '课程资源'
       };
       return titles[menu] || '欢迎使用SmartSE系统';
     },
