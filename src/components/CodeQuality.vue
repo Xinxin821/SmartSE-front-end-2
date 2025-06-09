@@ -78,6 +78,8 @@
 </template>
 
 <script>
+import axios from 'axios';
+
 export default {
   name: 'CodeQuality',
   data() {
@@ -101,10 +103,8 @@ export default {
       const files = event.dataTransfer.files;
       if (files.length > 0) {
         const file = files[0];
-        // 同时检查MIME类型和文件扩展名
         const validZipTypes = ['application/zip', 'application/x-zip-compressed', 'application/octet-stream'];
         const isZipExtension = file.name.toLowerCase().endsWith('.zip');
-
         if (validZipTypes.includes(file.type) || isZipExtension) {
           this.selectedFile = file;
         } else {
@@ -115,13 +115,11 @@ export default {
     triggerFileInput() {
       this.$refs.fileInput.click();
     },
-    handleFileSelect(evesnt) {
+    handleFileSelect(event) {
       const file = event.target.files[0];
       if (file) {
-        // 同时检查MIME类型和文件扩展名
         const validZipTypes = ['application/zip', 'application/x-zip-compressed', 'application/octet-stream'];
         const isZipExtension = file.name.toLowerCase().endsWith('.zip');
-
         if (validZipTypes.includes(file.type) || isZipExtension) {
           this.selectedFile = file;
         } else {
@@ -129,7 +127,6 @@ export default {
         }
       }
     },
-
     formatFileSize(size) {
       if (size < 1024) {
         return size + ' B';
@@ -148,7 +145,6 @@ export default {
       const formData = new FormData();
       formData.append('file', this.selectedFile);
 
-      // 实际API调用
       axios.post('http://localhost:8080/code-quality/analyze/sonar', formData, {
         onUploadProgress: (progressEvent) => {
           this.uploadProgress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
@@ -156,21 +152,19 @@ export default {
       })
           .then(response => {
             this.isUploading = false;
+            const resultText = response.data.data || '';
+            const urlMatch = resultText.match(/https?:\/\/[^\s]+/);
+            const reportUrl = urlMatch ? urlMatch[0] : '未能提取报告链接';
 
-            // 假设后端只返回报告链接
-            const reportUrl = response.data.reportUrl;
-
-            // 创建新报告对象
             const newReport = {
               id: Date.now().toString(),
               fileName: this.selectedFile.name,
               date: new Date().toLocaleString(),
               reportUrl: reportUrl,
-              // 如果后端不返回这些数据，可以使用默认值或省略
-              score: response.data.score || 'N/A',
-              bugs: response.data.bugs || 'N/A',
-              codeLines: response.data.codeLines || 'N/A',
-              complexity: response.data.complexity || 'N/A'
+              score: 'N/A',
+              bugs: 'N/A',
+              codeLines: 'N/A',
+              complexity: 'N/A'
             };
 
             this.reports.unshift(newReport);
@@ -182,26 +176,13 @@ export default {
             this.showErrorMessage('分析失败: ' + error.message);
           });
     },
-    // 修改报告对象结构，添加reportUrl字段
-    uploadComplete() {
-      const newReport = {
-        id: Date.now().toString(),
-        fileName: this.selectedFile.name,
-        date: new Date().toLocaleString(),
-        reportUrl: 'https://example.com/reports/' + Date.now().toString(), // 模拟后端返回的链接
-        score: Math.floor(Math.random() * 41) + 60,
-        bugs: Math.floor(Math.random() * 50),
-        codeLines: Math.floor(Math.random() * 10000) + 1000,
-        complexity: (Math.random() * 5).toFixed(1)
-      };
-
-      this.reports.unshift(newReport);
-      this.selectedFile = null;
-      this.showSuccessMessage('分析完成');
-    },
     viewReport(reportId) {
-      // 实际项目中，可能会跳转到报告详情页或打开新窗口
-      window.open(reportUrl, '_blank');
+      const report = this.reports.find(r => r.id === reportId);
+      if (report && report.reportUrl) {
+        window.open(report.reportUrl, '_blank');
+      } else {
+        this.showErrorMessage('未找到报告链接');
+      }
     },
     getScoreClass(score) {
       if (score >= 90) return 'excellent';
@@ -210,7 +191,6 @@ export default {
       return 'poor';
     },
     showSuccessMessage(message) {
-      // 使用Element Plus的消息提示
       this.$message.success(message);
     },
     showErrorMessage(message) {
@@ -219,6 +199,7 @@ export default {
   }
 }
 </script>
+
 
 <style scoped>
 .code-quality-container {
